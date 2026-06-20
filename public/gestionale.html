@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gestionale — Gestaway Condomini</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<style>
+  :root {
+    --bg: #f7f6f3;
+    --surface: #ffffff;
+    --border: #e5e3dd;
+    --text: #1a1a18;
+    --muted: #6b6b66;
+    --navy: #1a2e4a;
+    --green: #1D9E75;
+    --green-bg: #E1F5EE;
+    --green-text: #085041;
+    --amber: #BA7517;
+    --amber-bg: #FAEEDA;
+    --amber-text: #633806;
+    --red: #A32D2D;
+    --red-bg: #FCEBEB;
+    --red-text: #791F1F;
+    --blue: #185FA5;
+    --blue-bg: #E6F1FB;
+    --blue-text: #0C447C;
+    --gray-bg: #F1EFE8;
+    --gray-text: #444441;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    font-size: 14px;
+  }
+  a { color: inherit; text-decoration: none; }
+  button { font-family: inherit; cursor: pointer; }
+
+  /* ---- Layout ---- */
+  #app { display: flex; min-height: 100vh; }
+
+  .sidebar {
+    width: 230px;
+    background: var(--navy);
+    color: #cdd6e0;
+    display: flex;
+    flex-direction: column;
+    flex-shrink: 0;
+  }
+  .sidebar-header {
+    padding: 20px 18px 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.12);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #fff;
+  }
+  .sidebar-brand-mark {
+    width: 22px; height: 22px; border-radius: 5px;
+    background: var(--blue); color: #fff;
+    display: flex; align-items: center; justify-content: center;
+    font-weight: 700; font-size: 12px; flex-shrink: 0;
+  }
+  .selector-condominio {
+    padding: 14px 14px 8px;
+  }
+  .selector-condominio select {
+    width: 100%; padding: 8px; font-size: 12.5px; border-radius: 6px;
+    background: rgba(255,255,255,0.08); color: #fff; border: 1px solid rgba(255,255,255,0.2);
+    outline: none;
+  }
+  .btn-nuovo-condominio {
+    margin-top: 8px; width: 100%; background: none; border: 1px dashed rgba(255,255,255,0.3);
+    color: #b9c2cc; font-size: 11.5px; padding: 6px; border-radius: 6px;
+    display: flex; align-items: center; justify-content: center; gap: 4px;
+  }
+  .nav { flex: 1; padding: 10px 10px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; width: 100%;
+    padding: 9px 12px; margin-bottom: 2px; border-radius: 7px; border: none;
+    background: transparent; color: #b9c2cc; font-size: 13px;
+    text-align: left;
+  }
+  .nav-item.attivo { background: rgba(255,255,255,0.12); color: #fff; font-weight: 600; }
+  .sidebar-footer {
+    padding: 14px 18px; border-top: 1px solid rgba(255,255,255,0.12);
+    font-size: 11px; color: #8b97a5;
+  }
+  .btn-logout {
+    background: none; border: none; color: #8b97a5; font-size: 11.5px;
+    margin-top: 8px; padding: 0; text-decoration: underline;
+  }
+
+  .main {
+    flex: 1; padding: 26px 30px; overflow-y: auto; max-height: 100vh;
+  }
+  .main-header {
+    display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 22px;
+  }
+  .main-header h1 { font-size: 21px; font-weight: 600; color: var(--navy); }
+  .main-header .sub { font-size: 13px; color: var(--muted); margin-top: 3px; }
+  .stato-salvataggio { font-size: 11px; font-weight: 500; color: var(--green); }
+
+  /* ---- Cards / metriche ---- */
+  .metrics { display: flex; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
+  .metric-card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+    padding: 16px 18px; flex: 1; min-width: 150px;
+  }
+  .metric-label { font-size: 12.5px; color: var(--muted); font-weight: 500; margin-bottom: 8px; }
+  .metric-value { font-size: 24px; font-weight: 700; color: var(--navy); }
+  .metric-sub { font-size: 12px; color: #9a958a; margin-top: 4px; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 20px 22px; }
+  .card-title { font-size: 13px; font-weight: 600; color: var(--navy); margin-bottom: 14px; }
+
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 22px; }
+
+  /* ---- Tabelle ---- */
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th {
+    padding: 10px 16px; font-size: 11.5px; font-weight: 600; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.3px; text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  td { padding: 10px 16px; border-bottom: 1px solid #f0eee7; }
+  tr:last-child td { border-bottom: none; }
+
+  /* ---- Badge stato ---- */
+  .badge {
+    display: inline-flex; align-items: center; gap: 4px; font-size: 12px; font-weight: 500;
+    padding: 3px 9px; border-radius: 20px;
+  }
+  .badge.pagato { background: var(--green-bg); color: var(--green-text); }
+  .badge.emesso { background: var(--blue-bg); color: var(--blue-text); }
+  .badge.da_emettere { background: var(--gray-bg); color: var(--gray-text); }
+  .badge.scaduto { background: var(--red-bg); color: var(--red-text); }
+
+  /* ---- Bottoni ---- */
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 13.5px; font-weight: 500;
+    padding: 8px 14px; border-radius: 7px; border: none;
+  }
+  .btn-primary { background: var(--navy); color: #fff; }
+  .btn-secondary { background: #fff; color: var(--navy); border: 1px solid #c9c2ae; }
+  .btn-danger { background: #fff; color: var(--red); border: 1px solid #e8c9b8; }
+  .btn-sm { font-size: 11.5px; padding: 4px 9px; border-radius: 6px; }
+  .btn:hover { opacity: 0.85; }
+
+  .toolbar { display: flex; justify-content: space-between; margin-bottom: 16px; gap: 10px; flex-wrap: wrap; }
+  .search-box { position: relative; width: 240px; }
+  .search-box input { width: 100%; padding: 8px 10px 8px 30px; }
+
+  input, select {
+    font-size: 13.5px; border: 1px solid #c9c2ae; border-radius: 6px; outline: none;
+    background: #fff; color: var(--text); padding: 8px 10px;
+  }
+  input:focus, select:focus { border-color: var(--blue); }
+  label.field-label { display: block; font-size: 12px; font-weight: 500; color: var(--muted); margin-bottom: 5px; }
+
+  .filtri-stato { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filtro-pill {
+    padding: 6px 12px; border-radius: 20px; font-size: 12px; font-weight: 500;
+    border: 1px solid #d8d3c4; background: #fff; color: var(--text);
+  }
+  .filtro-pill.attivo { background: var(--navy); border-color: var(--navy); color: #fff; }
+
+  .avviso {
+    background: var(--amber-bg); color: var(--amber-text); font-size: 12.5px; padding: 8px 12px;
+    border-radius: 7px; margin-bottom: 14px;
+  }
+
+  .vuoto { text-align: center; padding: 30px; color: var(--muted); }
+
+  .spesa-riga {
+    display: flex; justify-content: space-between; align-items: center; cursor: pointer;
+  }
+  .spesa-riga .cat { font-weight: 500; font-size: 13.5px; color: var(--navy); }
+  .spesa-riga .meta { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .spesa-riga .importo { font-size: 15px; font-weight: 700; }
+  .lista-spese { display: flex; flex-direction: column; gap: 8px; }
+  .lista-spese .card { padding: 14px 18px; }
+
+  /* ---- Barra millesimi ---- */
+  .barra-millesimi { display: flex; height: 12px; border-radius: 6px; overflow: hidden; margin-bottom: 8px; }
+  .legenda-millesimi { display: flex; flex-wrap: wrap; gap: 4px 14px; }
+  .legenda-item { display: flex; align-items: center; gap: 5px; font-size: 11.5px; color: var(--muted); }
+  .legenda-dot { width: 8px; height: 8px; border-radius: 2px; display: inline-block; }
+
+  /* ---- Modale ---- */
+  .overlay {
+    position: fixed; inset: 0; background: rgba(26,46,74,0.45);
+    display: none; align-items: center; justify-content: center; z-index: 1000; padding: 16px;
+  }
+  .overlay.aperto { display: flex; }
+  .modale {
+    background: var(--bg); border-radius: 12px; width: 460px; max-width: 100%;
+    max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 50px rgba(0,0,0,0.2);
+  }
+  .modale-header {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 16px 20px; border-bottom: 1px solid var(--border);
+  }
+  .modale-header h3 { font-size: 16px; font-weight: 600; color: var(--navy); }
+  .modale-close { background: none; border: none; color: var(--muted); font-size: 18px; }
+  .modale-body { padding: 20px; display: flex; flex-direction: column; gap: 12px; }
+  .form-row { display: flex; gap: 10px; }
+  .form-row > div { flex: 1; }
+
+  .caricamento { text-align: center; padding: 60px; color: var(--muted); }
+
+  @media (max-width: 720px) {
+    .grid-2 { grid-template-columns: 1fr; }
+    .sidebar { width: 64px; }
+    .sidebar-header span, .selector-condominio, .nav-item span, .sidebar-footer { display: none; }
+    .nav-item { justify-content: center; }
+  }
+</style>
+</head>
+<body>
+
+<div id="app">
+  <div class="caricamento" id="caricamento-iniziale">Apertura archivio condominiale…</div>
+</div>
+
+<div class="overlay" id="overlay"></div>
+
+<script>
+const STATI = ['da_emettere', 'emesso', 'pagato', 'scaduto'];
+const CATEGORIE_SPESA = [
+  'Pulizie scale', 'Manutenzione ascensore', 'Energia elettrica comuni',
+  'Acqua condominiale', 'Riscaldamento centralizzato', 'Giardinaggio',
+  'Assicurazione stabile', 'Manutenzione straordinaria', 'Compenso amministratore',
+  'Spese amministrative', 'Altro'
+];
+const COLORI = ['#185FA5', '#1D9E75', '#A32D2D', '#7A6A9E', '#A38B3D', '#5C8A99', '#9E6B5C', '#6B7A4F'];
+
+let stato = {
+  condomini: [],
+  condominioId: null,
+  unita: [],
+  spese: [],
+  quote: [],
+  dashboard: null,
+  vista: 'dashboard',
+  ricercaUnita: '',
+  filtroScadenzario: 'tutti',
+};
+
+// ---------- Utility ----------
+const formatEUR = (n) => new Intl.NumberFormat('it-IT', { style: 'currency', currency: 'EUR' }).format(n || 0);
+const formatData = (d) => d ? new Intl.DateTimeFormat('it-IT', { day: '2-digit', month: '2-digit', year: 'numeric' }).format(new Date(d)) : '—';
+const escapeHtml = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+
+async function api(path, options = {}) {
+  const res = await fetch('/api' + path, {
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    ...options,
+  });
+  if (res.status === 401) {
+    window.location.href = '/login.html';
+    throw new Error('Non autenticato');
+  }
+  const dati = await res.json();
+  if (!res.ok) throw new Error(dati.errore || 'Errore richiesta');
+  return dati;
+}
+
+// ---------- Caricamento dati ----------
+async function caricaCondomini() {
+  stato.condomini = await api('/condomini');
+  if (!stato.condominioId && stato.condomini.length) {
+    stato.condominioId = stato.condomini[0].id;
+  }
+}
+
+async function caricaDatiCondominio() {
+  if (!stato.condominioId) { stato.unita = []; stato.spese = []; stato.quote = []; stato.dashboard = null; return; }
+  const [unita, spese, quote, dashboard] = await Promise.all([
+    api(`/condomini/${stato.condominioId}/unita`),
+    api(`/condomini/${stato.condominioId}/spese`),
+    api(`/condomini/${stato.condominioId}/quote`),
+    api(`/condomini/${stato.condominioId}/dashboard`),
+  ]);
+  stato.unita = unita;
+  stato.spese = spese;
+  stato.quote = quote;
+  stato.dashboard = dashboard;
+}
+
+async function ricaricaTutto() {
+  await caricaCondomini();
+  await caricaDatiCondominio();
+  render();
+}
+
+// ---------- Render principale ----------
+function render() {
+  const condominio = stato.condomini.find(c => c.id === stato.condominioId);
+
+  const app = document.getElementById('app');
+  app.innerHTML = `
+    <div class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-brand-mark">G</div>
+        <span>Fascicolo condominio</span>
+      </div>
+
+      <div class="selector-condominio">
+        <select id="select-condominio">
+          ${stato.condomini.map(c => `<option value="${c.id}" ${c.id === stato.condominioId ? 'selected' : ''}>${escapeHtml(c.nome)}</option>`).join('')}
+        </select>
+        <button class="btn-nuovo-condominio" id="btn-nuovo-condominio">+ Nuovo condominio</button>
+      </div>
+
+      <nav class="nav">
+        ${navItem('dashboard', 'Quadro generale')}
+        ${navItem('unita', 'Anagrafica unità')}
+        ${navItem('spese', 'Spese e ripartizioni')}
+        ${navItem('scadenzario', 'Scadenzario')}
+      </nav>
+
+      ${condominio ? `
+        <div class="sidebar-footer">
+          <div>${escapeHtml(condominio.indirizzo || '')}</div>
+          <div>${stato.unita.length} unità · ${totMillesimi()}‰ ripartiti</div>
+          <button class="btn-logout" id="btn-logout">Esci</button>
+        </div>
+      ` : `
+        <div class="sidebar-footer"><button class="btn-logout" id="btn-logout">Esci</button></div>
+      `}
+    </div>
+
+    <div class="main">
+      ${condominio ? renderContenuto(condominio) : renderVuoto()}
+    </div>
+  `;
+
+  collegaEventi(condominio);
+}
+
+function navItem(id, label) {
+  return `<button class="nav-item ${stato.vista === id ? 'attivo' : ''}" data-vista="${id}"><span>${label}</span></button>`;
+}
+
+function renderVuoto() {
+  return `
+    <div class="vuoto" style="padding:60px;">
+      <div style="margin-bottom:14px;">Nessun condominio in archivio.</div>
+      <button class="btn btn-primary" id="btn-crea-primo">+ Crea il primo condominio</button>
+    </div>
+  `;
+}
+
+function renderContenuto(condominio) {
+  let corpo = '';
+  if (stato.vista === 'dashboard') corpo = renderDashboard();
+  else if (stato.vista === 'unita') corpo = renderUnita();
+  else if (stato.vista === 'spese') corpo = renderSpese();
+  else if (stato.vista === 'scadenzario') corpo = renderScadenzario();
+
+  return `
+    <div class="main-header">
+      <div>
+        <h1>${escapeHtml(condominio.nome)}</h1>
+        <div class="sub">${escapeHtml(condominio.indirizzo || '')}</div>
+      </div>
+      <div class="stato-salvataggio" id="stato-salvataggio">✓ Sincronizzato</div>
+    </div>
+    ${corpo}
+  `;
+}
+
+function totMillesimi() {
+  return stato.unita.reduce((s, u) => s + Number(u.millesimi || 0), 0);
+}
+
+// ---------- Vista dashboard ----------
+function renderDashboard() {
+  const d = stato.dashboard || { totSpesaAnno: 0, totIncassato: 0, totDaIncassare: 0, numScaduti: 0, speseCategoria: [] };
+  return `
+    <div class="metrics">
+      <div class="metric-card">
+        <div class="metric-label">Spesa totale registrata</div>
+        <div class="metric-value">${formatEUR(d.totSpesaAnno)}</div>
+        <div class="metric-sub">${stato.unita.length} unità immobiliari</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Incassato</div>
+        <div class="metric-value" style="color:var(--green)">${formatEUR(d.totIncassato)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Da incassare</div>
+        <div class="metric-value" style="color:var(--amber)">${formatEUR(d.totDaIncassare)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Quote scadute</div>
+        <div class="metric-value" style="color:${d.numScaduti > 0 ? 'var(--red)' : 'var(--green)'}">${d.numScaduti}</div>
+        <div class="metric-sub">${d.numScaduti > 0 ? 'richiedono sollecito' : 'tutto regolare'}</div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:22px;">
+      <div class="card-title">Spese per categoria</div>
+      ${d.speseCategoria.length === 0 ? '<div class="vuoto">Nessuna spesa registrata.</div>' : `
+        <div style="display:flex; flex-direction:column; gap:8px;">
+          ${d.speseCategoria.sort((a,b) => b.importo - a.importo).map(c => {
+            const max = Math.max(...d.speseCategoria.map(x => x.importo));
+            const pct = max ? (c.importo / max * 100) : 0;
+            return `
+              <div>
+                <div style="display:flex; justify-content:space-between; font-size:12.5px; margin-bottom:4px;">
+                  <span>${escapeHtml(c.categoria)}</span>
+                  <strong>${formatEUR(c.importo)}</strong>
+                </div>
+                <div style="background:var(--gray-bg); border-radius:4px; height:8px;">
+                  <div style="background:var(--navy); width:${pct}%; height:100%; border-radius:4px;"></div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      `}
+    </div>
+
+    <div class="card">
+      <div class="card-title">Ripartizione millesimale</div>
+      ${renderBarraMillesimi(stato.unita)}
+    </div>
+
+    <div style="margin-top:22px; text-align:right;">
+      <button class="btn btn-danger" id="btn-elimina-condominio">Elimina condominio</button>
+    </div>
+  `;
+}
+
+function renderBarraMillesimi(unita) {
+  if (unita.length === 0) return '<div class="vuoto">Nessuna unità registrata.</div>';
+  return `
+    <div class="barra-millesimi">
+      ${unita.map((u, i) => `<div title="${escapeHtml(u.proprietario)}: ${u.millesimi}‰" style="width:${u.millesimi/10}%; background:${COLORI[i % COLORI.length]};"></div>`).join('')}
+    </div>
+    <div class="legenda-millesimi">
+      ${unita.map((u, i) => `
+        <div class="legenda-item">
+          <span class="legenda-dot" style="background:${COLORI[i % COLORI.length]};"></span>
+          ${escapeHtml(u.interno)} · ${u.millesimi}‰
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+// ---------- Vista unità ----------
+function renderUnita() {
+  const filtrate = stato.unita.filter(u =>
+    u.proprietario.toLowerCase().includes(stato.ricercaUnita.toLowerCase()) ||
+    u.interno.toLowerCase().includes(stato.ricercaUnita.toLowerCase())
+  );
+  const tot = totMillesimi();
+
+  return `
+    <div class="toolbar">
+      <div class="search-box">
+        <input type="text" id="input-ricerca-unita" placeholder="Cerca proprietario o interno…" value="${escapeHtml(stato.ricercaUnita)}">
+      </div>
+      <button class="btn btn-primary" id="btn-nuova-unita">+ Nuova unità</button>
+    </div>
+
+    ${tot !== 1000 && stato.unita.length > 0 ? `
+      <div class="avviso">I millesimi totali sono ${tot}‰ invece di 1000‰. Verifica la ripartizione.</div>
+    ` : ''}
+
+    <div class="card" style="padding:0;">
+      <table>
+        <thead>
+          <tr><th>Interno</th><th>Piano</th><th>Proprietario</th><th>Contatti</th><th>Millesimi</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${filtrate.map(u => `
+            <tr>
+              <td style="font-weight:500;">${escapeHtml(u.interno)}</td>
+              <td style="color:var(--muted);">${u.piano ?? '—'}°</td>
+              <td>${escapeHtml(u.proprietario)}</td>
+              <td style="color:var(--muted); font-size:12px;">
+                <div>${escapeHtml(u.email || '—')}</div>
+                <div>${escapeHtml(u.telefono || '')}</div>
+              </td>
+              <td style="font-weight:500;">${u.millesimi}‰</td>
+              <td style="text-align:right;">
+                <button class="btn-elimina-unita" data-id="${u.id}" style="background:none; border:none; color:var(--red);">✕</button>
+              </td>
+            </tr>
+          `).join('')}
+          ${filtrate.length === 0 ? `<tr><td colspan="6" class="vuoto">Nessuna unità trovata.</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ---------- Vista spese ----------
+function renderSpese() {
+  return `
+    <div class="toolbar">
+      <p style="font-size:13px; color:var(--muted); align-self:center;">
+        Ogni spesa viene ripartita automaticamente tra le ${stato.unita.length} unità in base ai millesimi.
+      </p>
+      <button class="btn btn-primary" id="btn-nuova-spesa">+ Nuova spesa</button>
+    </div>
+
+    <div class="lista-spese">
+      ${stato.spese.map(s => `
+        <div class="card spesa-riga-wrap" data-id="${s.id}">
+          <div class="spesa-riga">
+            <div>
+              <div class="cat">${escapeHtml(s.categoria)}</div>
+              <div class="meta">${formatData(s.data)}${s.fornitore ? ' · ' + escapeHtml(s.fornitore) : ''}${s.note ? ' · ' + escapeHtml(s.note) : ''}</div>
+            </div>
+            <div style="display:flex; align-items:center; gap:16px;">
+              <div class="importo">${formatEUR(s.importo)}</div>
+              <button class="btn-elimina-spesa" data-id="${s.id}" style="background:none; border:none; color:var(--red);">✕</button>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+      ${stato.spese.length === 0 ? `<div class="card vuoto">Nessuna spesa registrata. Aggiungi la prima voce di spesa.</div>` : ''}
+    </div>
+  `;
+}
+
+// ---------- Vista scadenzario ----------
+function renderScadenzario() {
+  const unitaMap = Object.fromEntries(stato.unita.map(u => [u.id, u]));
+  let quote = [...stato.quote].sort((a, b) => new Date(a.scadenza) - new Date(b.scadenza));
+  if (stato.filtroScadenzario !== 'tutti') quote = quote.filter(q => q.stato === stato.filtroScadenzario);
+
+  return `
+    <div class="filtri-stato">
+      ${['tutti', ...STATI].map(f => `
+        <button class="filtro-pill ${stato.filtroScadenzario === f ? 'attivo' : ''}" data-filtro="${f}">
+          ${f === 'tutti' ? 'Tutti' : labelStato(f)}
+        </button>
+      `).join('')}
+    </div>
+
+    <div class="card" style="padding:0;">
+      <table>
+        <thead>
+          <tr><th>Scadenza</th><th>Unità</th><th>Voce di spesa</th><th>Importo</th><th>Stato</th><th></th></tr>
+        </thead>
+        <tbody>
+          ${quote.map(q => {
+            const u = q.unita || unitaMap[q.unita_id] || {};
+            const sp = q.spese || {};
+            return `
+              <tr>
+                <td style="${q.stato === 'scaduto' ? 'color:var(--red); font-weight:600;' : ''}">${formatData(q.scadenza)}</td>
+                <td>${escapeHtml(u.interno || '—')} · ${escapeHtml(u.proprietario || '')}</td>
+                <td style="color:var(--muted);">${escapeHtml(sp.categoria || '—')}</td>
+                <td style="font-weight:500;">${formatEUR(q.importo)}</td>
+                <td><span class="badge ${q.stato}">${labelStato(q.stato)}</span></td>
+                <td style="text-align:right;">
+                  ${q.stato !== 'pagato'
+                    ? `<button class="btn btn-sm" style="color:var(--green); border:1px solid #c8e0ce; background:none;" data-cambia-stato="${q.id}" data-nuovo-stato="pagato">Segna pagato</button>`
+                    : `<button class="btn btn-sm" style="color:var(--muted); border:1px solid #d8d3c4; background:none;" data-cambia-stato="${q.id}" data-nuovo-stato="emesso">Annulla</button>`
+                  }
+                </td>
+              </tr>
+            `;
+          }).join('')}
+          ${quote.length === 0 ? `<tr><td colspan="6" class="vuoto">Nessuna quota in questo stato.</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function labelStato(s) {
+  return { da_emettere: 'Da emettere', emesso: 'Emesso', pagato: 'Pagato', scaduto: 'Scaduto' }[s] || s;
+}
+
+// ---------- Modali ----------
+function apriModale(html) {
+  const overlay = document.getElementById('overlay');
+  overlay.innerHTML = `<div class="modale">${html}</div>`;
+  overlay.classList.add('aperto');
+  overlay.onclick = (e) => { if (e.target === overlay) chiudiModale(); };
+}
+function chiudiModale() {
+  document.getElementById('overlay').classList.remove('aperto');
+}
+
+function modaleNuovoCondominio() {
+  apriModale(`
+    <div class="modale-header"><h3>Nuovo condominio</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div><label class="field-label">Nome condominio</label><input id="mc-nome" placeholder="es. Condominio Via Roma 5"></div>
+      <div><label class="field-label">Indirizzo</label><input id="mc-indirizzo" placeholder="Via, civico, città"></div>
+      <div><label class="field-label">Codice fiscale condominio</label><input id="mc-cf" placeholder="opzionale"></div>
+      <div><label class="field-label">IBAN</label><input id="mc-iban" placeholder="opzionale"></div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="mc-salva">Crea condominio</button>
+    </div>
+  `);
+  document.getElementById('mc-salva').onclick = async () => {
+    const nome = document.getElementById('mc-nome').value.trim();
+    if (!nome) return;
+    const nuovo = await api('/condomini', { method: 'POST', body: JSON.stringify({
+      nome,
+      indirizzo: document.getElementById('mc-indirizzo').value.trim(),
+      codice_fiscale: document.getElementById('mc-cf').value.trim(),
+      iban: document.getElementById('mc-iban').value.trim(),
+    })});
+    stato.condominioId = nuovo.id;
+    chiudiModale();
+    await ricaricaTutto();
+  };
+}
+
+function modaleNuovaUnita() {
+  apriModale(`
+    <div class="modale-header"><h3>Nuova unità immobiliare</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div class="form-row">
+        <div><label class="field-label">Interno</label><input id="mu-interno" placeholder="es. Int. 3"></div>
+        <div><label class="field-label">Piano</label><input id="mu-piano" type="number" placeholder="es. 2"></div>
+      </div>
+      <div><label class="field-label">Proprietario</label><input id="mu-proprietario" placeholder="Nome e cognome"></div>
+      <div class="form-row">
+        <div><label class="field-label">Email</label><input id="mu-email" placeholder="email@esempio.it"></div>
+        <div><label class="field-label">Telefono</label><input id="mu-telefono" placeholder="333 1234567"></div>
+      </div>
+      <div><label class="field-label">Millesimi di proprietà</label><input id="mu-millesimi" type="number" step="0.01" placeholder="es. 150"></div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="mu-salva">Salva unità</button>
+    </div>
+  `);
+  document.getElementById('mu-salva').onclick = async () => {
+    const interno = document.getElementById('mu-interno').value.trim();
+    const proprietario = document.getElementById('mu-proprietario').value.trim();
+    const millesimi = document.getElementById('mu-millesimi').value;
+    if (!interno || !proprietario || !millesimi) return;
+    await api(`/condomini/${stato.condominioId}/unita`, { method: 'POST', body: JSON.stringify({
+      interno, proprietario, millesimi: Number(millesimi),
+      piano: Number(document.getElementById('mu-piano').value) || null,
+      email: document.getElementById('mu-email').value.trim(),
+      telefono: document.getElementById('mu-telefono').value.trim(),
+    })});
+    chiudiModale();
+    await caricaDatiCondominio();
+    render();
+  };
+}
+
+function modaleNuovaSpesa() {
+  const oggi = new Date().toISOString().slice(0, 10);
+  apriModale(`
+    <div class="modale-header"><h3>Nuova spesa condominiale</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div>
+        <label class="field-label">Categoria</label>
+        <select id="ms-categoria" style="width:100%;">
+          ${CATEGORIE_SPESA.map(c => `<option value="${c}">${c}</option>`).join('')}
+        </select>
+      </div>
+      <div class="form-row">
+        <div><label class="field-label">Importo totale (€)</label><input id="ms-importo" type="number" step="0.01" placeholder="0.00"></div>
+        <div><label class="field-label">Data spesa</label><input id="ms-data" type="date" value="${oggi}"></div>
+      </div>
+      <div><label class="field-label">Fornitore (opzionale)</label><input id="ms-fornitore" placeholder="Nome fornitore"></div>
+      <div><label class="field-label">Note (opzionale)</label><input id="ms-note" placeholder="Riferimento fattura…"></div>
+      <p style="font-size:11.5px; color:var(--muted);">La spesa verrà ripartita automaticamente tra tutte le unità in base ai millesimi, con scadenza a 30 giorni.</p>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:4px;" id="ms-salva">Registra e ripartisci</button>
+    </div>
+  `);
+  document.getElementById('ms-salva').onclick = async () => {
+    const importo = document.getElementById('ms-importo').value;
+    if (!importo || Number(importo) <= 0) return;
+    try {
+      await api(`/condomini/${stato.condominioId}/spese`, { method: 'POST', body: JSON.stringify({
+        categoria: document.getElementById('ms-categoria').value,
+        importo: Number(importo),
+        data: document.getElementById('ms-data').value,
+        fornitore: document.getElementById('ms-fornitore').value.trim(),
+        note: document.getElementById('ms-note').value.trim(),
+      })});
+      chiudiModale();
+      await caricaDatiCondominio();
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
+  };
+}
+
+function modaleConfermaEliminaCondominio(condominio) {
+  apriModale(`
+    <div class="modale-header"><h3>Eliminare questo condominio?</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <p style="font-size:13.5px; color:var(--muted); line-height:1.6;">
+        Verranno eliminati anche tutte le unità, le spese e le quote associate a <strong>${escapeHtml(condominio.nome)}</strong>. L'operazione non è reversibile.
+      </p>
+      <div style="display:flex; gap:8px; justify-content:flex-end; margin-top:6px;">
+        <button class="btn btn-secondary" onclick="chiudiModale()">Annulla</button>
+        <button class="btn btn-danger" id="conferma-elimina">Elimina definitivamente</button>
+      </div>
+    </div>
+  `);
+  document.getElementById('conferma-elimina').onclick = async () => {
+    await api(`/condomini/${condominio.id}`, { method: 'DELETE' });
+    stato.condominioId = null;
+    chiudiModale();
+    await ricaricaTutto();
+  };
+}
+
+// ---------- Collegamento eventi ----------
+function collegaEventi(condominio) {
+  const sel = document.getElementById('select-condominio');
+  if (sel) sel.onchange = async (e) => {
+    stato.condominioId = e.target.value;
+    stato.vista = 'dashboard';
+    await caricaDatiCondominio();
+    render();
+  };
+
+  const btnNuovoCond = document.getElementById('btn-nuovo-condominio') || document.getElementById('btn-crea-primo');
+  if (btnNuovoCond) btnNuovoCond.onclick = modaleNuovoCondominio;
+
+  const btnLogout = document.getElementById('btn-logout');
+  if (btnLogout) btnLogout.onclick = async () => {
+    await api('/logout', { method: 'POST' });
+    window.location.href = '/login.html';
+  };
+
+  document.querySelectorAll('.nav-item').forEach(btn => {
+    btn.onclick = () => { stato.vista = btn.dataset.vista; render(); };
+  });
+
+  if (!condominio) return;
+
+  // Dashboard
+  const btnEliminaCond = document.getElementById('btn-elimina-condominio');
+  if (btnEliminaCond) btnEliminaCond.onclick = () => modaleConfermaEliminaCondominio(condominio);
+
+  // Unità
+  const inputRicerca = document.getElementById('input-ricerca-unita');
+  if (inputRicerca) inputRicerca.oninput = (e) => { stato.ricercaUnita = e.target.value; render(); };
+  const btnNuovaUnita = document.getElementById('btn-nuova-unita');
+  if (btnNuovaUnita) btnNuovaUnita.onclick = modaleNuovaUnita;
+  document.querySelectorAll('.btn-elimina-unita').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Eliminare questa unità?')) return;
+      await api(`/unita/${btn.dataset.id}`, { method: 'DELETE' });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+
+  // Spese
+  const btnNuovaSpesa = document.getElementById('btn-nuova-spesa');
+  if (btnNuovaSpesa) btnNuovaSpesa.onclick = modaleNuovaSpesa;
+  document.querySelectorAll('.btn-elimina-spesa').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm('Eliminare questa spesa e tutte le quote collegate?')) return;
+      await api(`/spese/${btn.dataset.id}`, { method: 'DELETE' });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+
+  // Scadenzario
+  document.querySelectorAll('.filtro-pill').forEach(btn => {
+    btn.onclick = () => { stato.filtroScadenzario = btn.dataset.filtro; render(); };
+  });
+  document.querySelectorAll('[data-cambia-stato]').forEach(btn => {
+    btn.onclick = async () => {
+      await api(`/quote/${btn.dataset.cambiaStato}/stato`, { method: 'PUT', body: JSON.stringify({ stato: btn.dataset.nuovoStato }) });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+}
+
+// ---------- Avvio ----------
+(async function avvia() {
+  try {
+    const sessione = await fetch('/api/sessione').then(r => r.json());
+    if (!sessione.autenticato) { window.location.href = '/login.html'; return; }
+    await ricaricaTutto();
+  } catch (err) {
+    document.getElementById('app').innerHTML = `<div class="caricamento">Errore di caricamento: ${escapeHtml(err.message)}</div>`;
+  }
+})();
+</script>
+
+</body>
+</html>
