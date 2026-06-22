@@ -120,12 +120,86 @@ app.delete('/api/condomini/:id', async (req, res) => {
 });
 
 // ------------------------------------------------------------
+// EDIFICI
+// ------------------------------------------------------------
+app.get('/api/condomini/:condominioId/edifici', async (req, res) => {
+  const { data, error } = await supabase
+    .from('edifici')
+    .select('*, scale(*)')
+    .eq('condominio_id', req.params.condominioId)
+    .order('nome', { ascending: true });
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.post('/api/condomini/:condominioId/edifici', async (req, res) => {
+  const { nome, codice, indirizzo } = req.body;
+  if (!nome) return res.status(400).json({ errore: 'Il nome dell\'edificio e\' obbligatorio.' });
+  const { data, error } = await supabase
+    .from('edifici')
+    .insert({ condominio_id: req.params.condominioId, nome, codice: codice || null, indirizzo: indirizzo || null })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.put('/api/edifici/:id', async (req, res) => {
+  const { nome, codice, indirizzo } = req.body;
+  const { data, error } = await supabase
+    .from('edifici')
+    .update({ nome, codice: codice || null, indirizzo: indirizzo || null })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.delete('/api/edifici/:id', async (req, res) => {
+  const { error } = await supabase.from('edifici').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------------------
+// SCALE
+// ------------------------------------------------------------
+app.get('/api/edifici/:edificioId/scale', async (req, res) => {
+  const { data, error } = await supabase
+    .from('scale')
+    .select('*')
+    .eq('edificio_id', req.params.edificioId)
+    .order('nome', { ascending: true });
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.post('/api/edifici/:edificioId/scale', async (req, res) => {
+  const { nome, codice, condominio_id } = req.body;
+  if (!nome) return res.status(400).json({ errore: 'Il nome della scala e\' obbligatorio.' });
+  const { data, error } = await supabase
+    .from('scale')
+    .insert({ edificio_id: req.params.edificioId, condominio_id, nome, codice: codice || null })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.delete('/api/scale/:id', async (req, res) => {
+  const { error } = await supabase.from('scale').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------------------
 // UNITA'
 // ------------------------------------------------------------
 app.get('/api/condomini/:condominioId/unita', async (req, res) => {
   const { data, error } = await supabase
     .from('unita')
-    .select('*')
+    .select('*, edifici(nome), scale(nome)')
     .eq('condominio_id', req.params.condominioId)
     .order('interno', { ascending: true });
   if (error) return res.status(500).json({ errore: error.message });
@@ -133,7 +207,13 @@ app.get('/api/condomini/:condominioId/unita', async (req, res) => {
 });
 
 app.post('/api/condomini/:condominioId/unita', async (req, res) => {
-  const { interno, piano, proprietario, email, telefono, millesimi, catasto_foglio, catasto_particella, catasto_subalterno } = req.body;
+  const {
+    interno, piano, proprietario, email, telefono, millesimi,
+    scala_id, edificio_id, tipo_ui, tipo_abituativo,
+    catasto_foglio, catasto_particella, catasto_subalterno,
+    catasto_sezione, catasto_categoria, catasto_classe,
+    catasto_consistenza, catasto_rendita, catasto_estensione_part
+  } = req.body;
   if (!interno || !proprietario || millesimi == null) {
     return res.status(400).json({ errore: 'Interno, proprietario e millesimi sono obbligatori.' });
   }
@@ -143,32 +223,58 @@ app.post('/api/condomini/:condominioId/unita', async (req, res) => {
       condominio_id: req.params.condominioId,
       interno, piano: piano || null, proprietario, email, telefono,
       millesimi: Number(millesimi),
+      scala_id: scala_id || null,
+      edificio_id: edificio_id || null,
+      tipo_ui: tipo_ui || 'Appartamento',
+      tipo_abituativo: tipo_abituativo || 'Unità abitativa',
       catasto_foglio: catasto_foglio || null,
       catasto_particella: catasto_particella || null,
       catasto_subalterno: catasto_subalterno || null,
+      catasto_sezione: catasto_sezione || null,
+      catasto_categoria: catasto_categoria || null,
+      catasto_classe: catasto_classe || null,
+      catasto_consistenza: catasto_consistenza || null,
+      catasto_rendita: catasto_rendita ? Number(catasto_rendita) : null,
+      catasto_estensione_part: catasto_estensione_part || null,
     })
     .select()
     .single();
   if (error) return res.status(500).json({ errore: error.message });
 
-  // Crea automaticamente il primo titolare (proprietario) cosi' l'unita'
-  // ha sempre almeno una persona registrata nel registro anagrafe.
+  // Crea automaticamente il primo titolare (proprietario)
   await supabase.from('titolari').insert({
-    unita_id: data.id, nome: proprietario, tipo: 'proprietario', email, telefono,
+    unita_id: data.id, nome: proprietario, tipo: 'proprietario',
+    email, telefono, principale: true,
   });
 
   res.json(data);
 });
 
 app.put('/api/unita/:id', async (req, res) => {
-  const { interno, piano, proprietario, email, telefono, millesimi, catasto_foglio, catasto_particella, catasto_subalterno } = req.body;
+  const {
+    interno, piano, proprietario, email, telefono, millesimi,
+    scala_id, edificio_id, tipo_ui, tipo_abituativo,
+    catasto_foglio, catasto_particella, catasto_subalterno,
+    catasto_sezione, catasto_categoria, catasto_classe,
+    catasto_consistenza, catasto_rendita, catasto_estensione_part
+  } = req.body;
   const { data, error } = await supabase
     .from('unita')
     .update({
       interno, piano, proprietario, email, telefono, millesimi: Number(millesimi),
+      scala_id: scala_id || null,
+      edificio_id: edificio_id || null,
+      tipo_ui: tipo_ui || 'Appartamento',
+      tipo_abituativo: tipo_abituativo || 'Unità abitativa',
       catasto_foglio: catasto_foglio || null,
       catasto_particella: catasto_particella || null,
       catasto_subalterno: catasto_subalterno || null,
+      catasto_sezione: catasto_sezione || null,
+      catasto_categoria: catasto_categoria || null,
+      catasto_classe: catasto_classe || null,
+      catasto_consistenza: catasto_consistenza || null,
+      catasto_rendita: catasto_rendita ? Number(catasto_rendita) : null,
+      catasto_estensione_part: catasto_estensione_part || null,
     })
     .eq('id', req.params.id)
     .select()
@@ -198,7 +304,9 @@ app.get('/api/unita/:unitaId/titolari', async (req, res) => {
 });
 
 app.post('/api/unita/:unitaId/titolari', async (req, res) => {
-  const { nome, tipo, codice_fiscale, email, telefono, percentuale } = req.body;
+  const { nome, tipo, codice_fiscale, email, telefono, percentuale,
+    data_dal, data_al, percentuale_registro, percentuale_detrazione,
+    percentuale_bilancio, principale, invio } = req.body;
   const tipiValidi = ['proprietario', 'nudo_proprietario', 'usufruttuario', 'inquilino'];
   if (!nome) return res.status(400).json({ errore: 'Il nome del titolare e\' obbligatorio.' });
   if (tipo && !tipiValidi.includes(tipo)) return res.status(400).json({ errore: 'Tipo titolare non valido.' });
@@ -211,6 +319,13 @@ app.post('/api/unita/:unitaId/titolari', async (req, res) => {
       codice_fiscale: codice_fiscale || null,
       email: email || null, telefono: telefono || null,
       percentuale: percentuale != null ? Number(percentuale) : null,
+      data_dal: data_dal || null,
+      data_al: data_al || null,
+      percentuale_registro: percentuale_registro != null ? Number(percentuale_registro) : null,
+      percentuale_detrazione: percentuale_detrazione != null ? Number(percentuale_detrazione) : null,
+      percentuale_bilancio: percentuale_bilancio != null ? Number(percentuale_bilancio) : null,
+      principale: principale ?? false,
+      invio: invio ?? true,
     })
     .select()
     .single();

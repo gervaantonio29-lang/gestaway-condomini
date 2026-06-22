@@ -243,6 +243,7 @@ let stato = {
   condomini: [],
   condominioId: null,
   unita: [],
+  edifici: [],
   spese: [],
   quote: [],
   dashboard: null,
@@ -280,17 +281,19 @@ async function caricaCondomini() {
 }
 
 async function caricaDatiCondominio() {
-  if (!stato.condominioId) { stato.unita = []; stato.spese = []; stato.quote = []; stato.dashboard = null; return; }
-  const [unita, spese, quote, dashboard] = await Promise.all([
+  if (!stato.condominioId) { stato.unita = []; stato.spese = []; stato.quote = []; stato.dashboard = null; stato.edifici = []; return; }
+  const [unita, spese, quote, dashboard, edifici] = await Promise.all([
     api(`/condomini/${stato.condominioId}/unita`),
     api(`/condomini/${stato.condominioId}/spese`),
     api(`/condomini/${stato.condominioId}/quote`),
     api(`/condomini/${stato.condominioId}/dashboard`),
+    api(`/condomini/${stato.condominioId}/edifici`),
   ]);
   stato.unita = unita;
   stato.spese = spese;
   stato.quote = quote;
   stato.dashboard = dashboard;
+  stato.edifici = edifici;
 }
 
 async function ricaricaTutto() {
@@ -464,43 +467,95 @@ function renderUnita() {
   );
   const tot = totMillesimi();
 
+  // Costruisci albero gerarchico edifici → scale → unità
+  const albero = stato.edifici.map(ed => ({
+    ...ed,
+    scale: (ed.scale || []).map(sc => ({
+      ...sc,
+      unita: filtrate.filter(u => u.scala_id === sc.id),
+    })),
+    unitaSenzaScala: filtrate.filter(u => u.edificio_id === ed.id && !u.scala_id),
+  }));
+  const unitaSenzaEdificio = filtrate.filter(u => !u.edificio_id);
+
   return `
     <div class="toolbar">
       <div class="search-box">
         <input type="text" id="input-ricerca-unita" placeholder="Cerca proprietario o interno…" value="${escapeHtml(stato.ricercaUnita)}">
       </div>
-      <button class="btn btn-primary" id="btn-nuova-unita">+ Nuova unità</button>
+      <div style="display:flex; gap:8px;">
+        <button class="btn btn-secondary" id="btn-gestisci-edifici">⊞ Edifici/Scale</button>
+        <button class="btn btn-primary" id="btn-nuova-unita">+ Nuova unità</button>
+      </div>
     </div>
 
     ${tot !== 1000 && stato.unita.length > 0 ? `
       <div class="avviso">I millesimi totali sono ${tot}‰ invece di 1000‰. Verifica la ripartizione.</div>
     ` : ''}
 
-    <div class="card" style="padding:0;">
-      <table>
-        <thead>
-          <tr><th>Interno</th><th>Piano</th><th>Proprietario</th><th>Contatti</th><th>Millesimi</th><th></th></tr>
-        </thead>
-        <tbody>
-          ${filtrate.map(u => `
-            <tr class="riga-unita" data-id="${u.id}" style="cursor:pointer;">
-              <td style="font-weight:500;">${escapeHtml(u.interno)}</td>
-              <td style="color:var(--muted);">${u.piano ?? '—'}°</td>
-              <td>${escapeHtml(u.proprietario)}</td>
-              <td style="color:var(--muted); font-size:12px;">
-                <div>${escapeHtml(u.email || '—')}</div>
-                <div>${escapeHtml(u.telefono || '')}</div>
-              </td>
-              <td style="font-weight:500;">${u.millesimi}‰</td>
-              <td style="text-align:right;">
-                <button class="btn-elimina-unita" data-id="${u.id}" style="background:none; border:none; color:var(--red);">✕</button>
-              </td>
-            </tr>
-          `).join('')}
-          ${filtrate.length === 0 ? `<tr><td colspan="6" class="vuoto">Nessuna unità trovata.</td></tr>` : ''}
-        </tbody>
-      </table>
-    </div>
+    ${albero.map(ed => `
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:var(--navy); text-transform:uppercase; letter-spacing:0.5px; padding:6px 0; border-bottom:2px solid var(--navy); margin-bottom:10px;">
+          ${escapeHtml(ed.nome)}${ed.codice ? ` (${escapeHtml(ed.codice)})` : ''}
+        </div>
+        ${ed.scale.map(sc => `
+          <div style="margin-bottom:12px;">
+            <div style="font-size:11.5px; font-weight:600; color:var(--muted); padding:4px 0 6px; border-bottom:1px solid var(--border); margin-bottom:6px;">
+              ${escapeHtml(sc.nome)}${sc.codice ? ` · ${escapeHtml(sc.codice)}` : ''}
+            </div>
+            ${sc.unita.length > 0 ? `
+              <div class="card" style="padding:0;">
+                <table>
+                  <thead><tr>
+                    <th>Interno</th><th>Piano</th><th>Tipo</th><th>Proprietario</th><th>Millesimi</th><th></th>
+                  </tr></thead>
+                  <tbody>
+                    ${sc.unita.map(u => rigaUnita(u)).join('')}
+                  </tbody>
+                </table>
+              </div>
+            ` : '<div style="font-size:12px; color:var(--muted); padding:4px 0;">Nessuna unità in questa scala.</div>'}
+          </div>
+        `).join('')}
+      </div>
+    `).join('')}
+
+    ${unitaSenzaEdificio.length > 0 ? `
+      <div style="margin-bottom:20px;">
+        <div style="font-size:12px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:0.5px; padding:6px 0; border-bottom:1px dashed var(--border); margin-bottom:10px;">
+          Unità senza edificio assegnato
+        </div>
+        <div class="card" style="padding:0;">
+          <table>
+            <thead><tr>
+              <th>Interno</th><th>Piano</th><th>Tipo</th><th>Proprietario</th><th>Millesimi</th><th></th>
+            </tr></thead>
+            <tbody>
+              ${unitaSenzaEdificio.map(u => rigaUnita(u)).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    ` : ''}
+
+    ${stato.edifici.length === 0 && stato.unita.length === 0 ? `
+      <div class="card vuoto">Nessuna unità. Crea prima un edificio, poi aggiungi le unità.</div>
+    ` : ''}
+  `;
+}
+
+function rigaUnita(u) {
+  return `
+    <tr class="riga-unita" data-id="${u.id}" style="cursor:pointer;">
+      <td style="font-weight:500;">${escapeHtml(u.interno)}</td>
+      <td style="color:var(--muted);">${u.piano ?? '—'}°</td>
+      <td style="font-size:12px; color:var(--muted);">${escapeHtml(u.tipo_ui || 'Appartamento')}</td>
+      <td>${escapeHtml(u.proprietario)}</td>
+      <td style="font-weight:500;">${u.millesimi}‰</td>
+      <td style="text-align:right;">
+        <button class="btn-elimina-unita" data-id="${u.id}" style="background:none; border:none; color:var(--red);">✕</button>
+      </td>
+    </tr>
   `;
 }
 
@@ -586,9 +641,9 @@ function labelStato(s) {
 }
 
 // ---------- Modali ----------
-function apriModale(html) {
+function apriModale(html, width = 460) {
   const overlay = document.getElementById('overlay');
-  overlay.innerHTML = `<div class="modale">${html}</div>`;
+  overlay.innerHTML = `<div class="modale" style="width:${width}px;">${html}</div>`;
   overlay.classList.add('aperto');
   overlay.onclick = (e) => { if (e.target === overlay) chiudiModale(); };
 }
@@ -623,47 +678,111 @@ function modaleNuovoCondominio() {
 }
 
 function modaleNuovaUnita() {
+  // Costruisci opzioni scala raggruppate per edificio
+  let opzioniScala = '<option value="">— Nessuna scala —</option>';
+  stato.edifici.forEach(ed => {
+    if (ed.scale && ed.scale.length) {
+      opzioniScala += `<optgroup label="${escapeHtml(ed.nome)}">`;
+      ed.scale.forEach(sc => {
+        opzioniScala += `<option value="${sc.id}" data-edificio="${ed.id}">${escapeHtml(sc.nome)}</option>`;
+      });
+      opzioniScala += '</optgroup>';
+    }
+  });
+
   apriModale(`
     <div class="modale-header"><h3>Nuova unità immobiliare</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
     <div class="modale-body">
       <div class="form-row">
-        <div><label class="field-label">Interno</label><input id="mu-interno" placeholder="es. Int. 3"></div>
-        <div><label class="field-label">Piano</label><input id="mu-piano" type="number" placeholder="es. 2"></div>
+        <div><label class="field-label">Scala</label>
+          <select id="mu-scala" style="width:100%;">${opzioniScala}</select>
+        </div>
+        <div><label class="field-label">Tipo UI</label>
+          <select id="mu-tipo-ui" style="width:100%;">
+            <option>Appartamento</option>
+            <option>Negozio</option>
+            <option>Ufficio</option>
+            <option>Box/Garage</option>
+            <option>Cantina</option>
+            <option>Altro</option>
+          </select>
+        </div>
       </div>
-      <div><label class="field-label">Proprietario</label><input id="mu-proprietario" placeholder="Nome e cognome"></div>
+      <div class="form-row">
+        <div><label class="field-label">Piano</label><input id="mu-piano" type="number" placeholder="es. 2"></div>
+        <div><label class="field-label">Interno</label><input id="mu-interno" placeholder="es. 1"></div>
+      </div>
+      <div><label class="field-label">Proprietario (nome unità)</label><input id="mu-proprietario" placeholder="Nome e cognome"></div>
       <div class="form-row">
         <div><label class="field-label">Email</label><input id="mu-email" placeholder="email@esempio.it"></div>
         <div><label class="field-label">Telefono</label><input id="mu-telefono" placeholder="333 1234567"></div>
       </div>
       <div><label class="field-label">Millesimi di proprietà</label><input id="mu-millesimi" type="number" step="0.01" placeholder="es. 150"></div>
-      <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:2px;">
-        <label class="field-label" style="margin-bottom:8px;">Dati catastali (opzionali — Registro Anagrafe Condominiale)</label>
+
+      <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:4px;">
+        <label class="field-label" style="margin-bottom:8px; font-weight:600;">Dati catastali</label>
         <div class="form-row">
+          <div><label class="field-label">Sezione</label><input id="mu-sezione" placeholder="opz."></div>
           <div><label class="field-label">Foglio</label><input id="mu-foglio" placeholder="es. 12"></div>
           <div><label class="field-label">Particella</label><input id="mu-particella" placeholder="es. 345"></div>
+        </div>
+        <div class="form-row">
+          <div><label class="field-label">Estensione part.</label><input id="mu-estensione" placeholder="opz."></div>
           <div><label class="field-label">Subalterno</label><input id="mu-subalterno" placeholder="es. 7"></div>
+          <div><label class="field-label">Categoria</label><input id="mu-categoria-cat" placeholder="es. A/2"></div>
+        </div>
+        <div class="form-row">
+          <div><label class="field-label">Classe</label><input id="mu-classe" placeholder="opz."></div>
+          <div><label class="field-label">Consistenza</label><input id="mu-consistenza" placeholder="opz."></div>
+          <div><label class="field-label">Rendita (€)</label><input id="mu-rendita" type="number" step="0.01" placeholder="opz."></div>
         </div>
       </div>
+
       <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="mu-salva">Salva unità</button>
     </div>
-  `);
+  `, 500);
+
+  // Quando cambia la scala, aggiorna automaticamente edificio_id
+  document.getElementById('mu-scala').onchange = (e) => {
+    const opt = e.target.selectedOptions[0];
+    document.getElementById('mu-scala').dataset.edificioId = opt?.dataset?.edificio || '';
+  };
+
   document.getElementById('mu-salva').onclick = async () => {
     const interno = document.getElementById('mu-interno').value.trim();
     const proprietario = document.getElementById('mu-proprietario').value.trim();
     const millesimi = document.getElementById('mu-millesimi').value;
     if (!interno || !proprietario || !millesimi) return;
-    await api(`/condomini/${stato.condominioId}/unita`, { method: 'POST', body: JSON.stringify({
-      interno, proprietario, millesimi: Number(millesimi),
-      piano: Number(document.getElementById('mu-piano').value) || null,
-      email: document.getElementById('mu-email').value.trim(),
-      telefono: document.getElementById('mu-telefono').value.trim(),
-      catasto_foglio: document.getElementById('mu-foglio').value.trim(),
-      catasto_particella: document.getElementById('mu-particella').value.trim(),
-      catasto_subalterno: document.getElementById('mu-subalterno').value.trim(),
-    })});
-    chiudiModale();
-    await caricaDatiCondominio();
-    render();
+
+    const scalaSelect = document.getElementById('mu-scala');
+    const scalaId = scalaSelect.value || null;
+    const edificioId = scalaSelect.dataset.edificioId || null;
+
+    try {
+      await api(`/condomini/${stato.condominioId}/unita`, { method: 'POST', body: JSON.stringify({
+        interno, proprietario, millesimi: Number(millesimi),
+        piano: Number(document.getElementById('mu-piano').value) || null,
+        email: document.getElementById('mu-email').value.trim(),
+        telefono: document.getElementById('mu-telefono').value.trim(),
+        scala_id: scalaId,
+        edificio_id: edificioId,
+        tipo_ui: document.getElementById('mu-tipo-ui').value,
+        catasto_sezione: document.getElementById('mu-sezione').value.trim(),
+        catasto_foglio: document.getElementById('mu-foglio').value.trim(),
+        catasto_particella: document.getElementById('mu-particella').value.trim(),
+        catasto_estensione_part: document.getElementById('mu-estensione').value.trim(),
+        catasto_subalterno: document.getElementById('mu-subalterno').value.trim(),
+        catasto_categoria: document.getElementById('mu-categoria-cat').value.trim(),
+        catasto_classe: document.getElementById('mu-classe').value.trim(),
+        catasto_consistenza: document.getElementById('mu-consistenza').value.trim(),
+        catasto_rendita: document.getElementById('mu-rendita').value || null,
+      })});
+      chiudiModale();
+      await caricaDatiCondominio();
+      render();
+    } catch (err) {
+      alert(err.message);
+    }
   };
 }
 
@@ -773,6 +892,89 @@ function renderDettaglioUnitaBody(unita, datiCatastali, titolari) {
 }
 
 
+async function modaleGestisciEdifici() {
+  const renderBody = () => {
+    const body = document.getElementById('mge-body');
+    if (!body) return;
+    body.innerHTML = `
+      <div style="display:flex; flex-direction:column; gap:14px;">
+        ${stato.edifici.map(ed => `
+          <div style="background:var(--bg); border:1px solid var(--border); border-radius:8px; padding:12px 14px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+              <strong style="font-size:13.5px; color:var(--navy);">${escapeHtml(ed.nome)}${ed.codice ? ` <span style="color:var(--muted); font-weight:400;">(${escapeHtml(ed.codice)})</span>` : ''}</strong>
+              <button class="btn-elimina-edificio" data-id="${ed.id}" style="background:none; border:none; color:var(--red); font-size:12px;">Elimina</button>
+            </div>
+            <div style="display:flex; flex-wrap:wrap; gap:6px; margin-bottom:8px;">
+              ${(ed.scale || []).map(sc => `
+                <span style="background:var(--blue-bg); color:var(--blue-text); font-size:11.5px; padding:3px 9px; border-radius:20px; display:inline-flex; align-items:center; gap:6px;">
+                  ${escapeHtml(sc.nome)}
+                  <button class="btn-elimina-scala" data-id="${sc.id}" style="background:none; border:none; color:var(--blue-text); cursor:pointer; font-size:12px; padding:0;">×</button>
+                </span>
+              `).join('')}
+            </div>
+            <div style="display:flex; gap:6px;">
+              <input class="input-nuova-scala" data-edificio="${ed.id}" placeholder="Nome scala (es. Scala B)" style="font-size:12px; padding:5px 8px; border:1px solid var(--border); border-radius:5px; flex:1;">
+              <button class="btn-aggiungi-scala" data-edificio="${ed.id}" data-condominio="${stato.condominioId}" style="font-size:12px; padding:5px 10px; background:var(--navy); color:#fff; border:none; border-radius:5px; cursor:pointer;">+ Scala</button>
+            </div>
+          </div>
+        `).join('')}
+
+        <div style="border-top:1px solid var(--border); padding-top:12px;">
+          <label class="field-label">Aggiungi edificio</label>
+          <div style="display:flex; gap:6px;">
+            <input id="input-nuovo-edificio" placeholder="Nome edificio (es. Edificio B)" style="font-size:13px; padding:8px; border:1px solid var(--border); border-radius:6px; flex:1;">
+            <button id="btn-aggiungi-edificio" style="font-size:13px; padding:8px 12px; background:var(--navy); color:#fff; border:none; border-radius:6px; cursor:pointer;">+ Edificio</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.getElementById('btn-aggiungi-edificio')?.addEventListener('click', async () => {
+      const nome = document.getElementById('input-nuovo-edificio').value.trim();
+      if (!nome) return;
+      await api(`/condomini/${stato.condominioId}/edifici`, { method: 'POST', body: JSON.stringify({ nome }) });
+      await caricaDatiCondominio();
+      renderBody();
+    });
+
+    document.querySelectorAll('.btn-aggiungi-scala').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        const input = document.querySelector(`.input-nuova-scala[data-edificio="${btn.dataset.edificio}"]`);
+        const nome = input?.value.trim();
+        if (!nome) return;
+        await api(`/edifici/${btn.dataset.edificio}/scale`, { method: 'POST', body: JSON.stringify({ nome, condominio_id: stato.condominioId }) });
+        await caricaDatiCondominio();
+        renderBody();
+      });
+    });
+
+    document.querySelectorAll('.btn-elimina-edificio').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        if (!confirm('Eliminare questo edificio e tutte le sue scale?')) return;
+        await api(`/edifici/${btn.dataset.id}`, { method: 'DELETE' });
+        await caricaDatiCondominio();
+        renderBody();
+      });
+    });
+
+    document.querySelectorAll('.btn-elimina-scala').forEach(btn => {
+      btn.addEventListener('click', async () => {
+        await api(`/scale/${btn.dataset.id}`, { method: 'DELETE' });
+        await caricaDatiCondominio();
+        renderBody();
+      });
+    });
+  };
+
+  apriModale(`
+    <div class="modale-header"><h3>Gestione edifici e scale</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body" id="mge-body"></div>
+  `, 500);
+
+  renderBody();
+}
+
+
 function modaleNuovaSpesa() {
   const oggi = new Date().toISOString().slice(0, 10);
   apriModale(`
@@ -871,6 +1073,8 @@ function collegaEventi(condominio) {
   if (inputRicerca) inputRicerca.oninput = (e) => { stato.ricercaUnita = e.target.value; render(); };
   const btnNuovaUnita = document.getElementById('btn-nuova-unita');
   if (btnNuovaUnita) btnNuovaUnita.onclick = modaleNuovaUnita;
+  const btnGestisciEdifici = document.getElementById('btn-gestisci-edifici');
+  if (btnGestisciEdifici) btnGestisciEdifici.onclick = modaleGestisciEdifici;
   document.querySelectorAll('.riga-unita').forEach(tr => {
     tr.onclick = (e) => {
       if (e.target.closest('.btn-elimina-unita')) return;
