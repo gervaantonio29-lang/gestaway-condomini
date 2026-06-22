@@ -773,6 +773,7 @@ function renderDettaglioUnitaBody(unita, datiCatastali, titolari) {
 }
 
 
+function modaleNuovaSpesa() {
   const oggi = new Date().toISOString().slice(0, 10);
   apriModale(`
     <div class="modale-header"><h3>Nuova spesa condominiale</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
