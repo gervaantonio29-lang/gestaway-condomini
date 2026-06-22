@@ -483,7 +483,7 @@ function renderUnita() {
         </thead>
         <tbody>
           ${filtrate.map(u => `
-            <tr>
+            <tr class="riga-unita" data-id="${u.id}" style="cursor:pointer;">
               <td style="font-weight:500;">${escapeHtml(u.interno)}</td>
               <td style="color:var(--muted);">${u.piano ?? '—'}°</td>
               <td>${escapeHtml(u.proprietario)}</td>
@@ -636,6 +636,14 @@ function modaleNuovaUnita() {
         <div><label class="field-label">Telefono</label><input id="mu-telefono" placeholder="333 1234567"></div>
       </div>
       <div><label class="field-label">Millesimi di proprietà</label><input id="mu-millesimi" type="number" step="0.01" placeholder="es. 150"></div>
+      <div style="border-top:1px solid var(--border); padding-top:12px; margin-top:2px;">
+        <label class="field-label" style="margin-bottom:8px;">Dati catastali (opzionali — Registro Anagrafe Condominiale)</label>
+        <div class="form-row">
+          <div><label class="field-label">Foglio</label><input id="mu-foglio" placeholder="es. 12"></div>
+          <div><label class="field-label">Particella</label><input id="mu-particella" placeholder="es. 345"></div>
+          <div><label class="field-label">Subalterno</label><input id="mu-subalterno" placeholder="es. 7"></div>
+        </div>
+      </div>
       <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="mu-salva">Salva unità</button>
     </div>
   `);
@@ -649,6 +657,9 @@ function modaleNuovaUnita() {
       piano: Number(document.getElementById('mu-piano').value) || null,
       email: document.getElementById('mu-email').value.trim(),
       telefono: document.getElementById('mu-telefono').value.trim(),
+      catasto_foglio: document.getElementById('mu-foglio').value.trim(),
+      catasto_particella: document.getElementById('mu-particella').value.trim(),
+      catasto_subalterno: document.getElementById('mu-subalterno').value.trim(),
     })});
     chiudiModale();
     await caricaDatiCondominio();
@@ -656,7 +667,112 @@ function modaleNuovaUnita() {
   };
 }
 
-function modaleNuovaSpesa() {
+function labelTipoTitolare(t) {
+  return { proprietario: 'Proprietario', nudo_proprietario: 'Nudo proprietario', usufruttuario: 'Usufruttuario', inquilino: 'Inquilino' }[t] || t;
+}
+
+async function modaleDettaglioUnita(unita) {
+  apriModale(`
+    <div class="modale-header"><h3>${escapeHtml(unita.interno)} — ${escapeHtml(unita.proprietario)}</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body" id="mdu-body">
+      <div style="font-size:12.5px; color:var(--muted);">Caricamento titolari…</div>
+    </div>
+  `, 520);
+
+  const datiCatastali = [unita.catasto_foglio, unita.catasto_particella, unita.catasto_subalterno].some(Boolean)
+    ? `Foglio ${unita.catasto_foglio || '—'} · Particella ${unita.catasto_particella || '—'} · Sub. ${unita.catasto_subalterno || '—'}`
+    : 'Non specificati';
+
+  let titolari = [];
+  try {
+    titolari = await api(`/unita/${unita.id}/titolari`);
+  } catch (err) {
+    document.getElementById('mdu-body').innerHTML = `<div class="avviso">Errore nel caricamento titolari: ${escapeHtml(err.message)}</div>`;
+    return;
+  }
+
+  renderDettaglioUnitaBody(unita, datiCatastali, titolari);
+}
+
+function renderDettaglioUnitaBody(unita, datiCatastali, titolari) {
+  document.getElementById('mdu-body').innerHTML = `
+    <div style="font-size:12.5px; color:var(--muted); padding-bottom:12px; border-bottom:1px solid var(--border);">
+      <strong>Dati catastali:</strong> ${escapeHtml(datiCatastali)}<br>
+      <strong>Millesimi:</strong> ${unita.millesimi}‰
+    </div>
+
+    <div style="display:flex; justify-content:space-between; align-items:center; margin-top:4px;">
+      <label class="field-label" style="margin:0;">Titolari registrati</label>
+      <button class="btn btn-secondary btn-sm" id="mdu-aggiungi-titolare">+ Aggiungi titolare</button>
+    </div>
+
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      ${titolari.map(t => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:8px 10px; background:var(--bg); border-radius:7px; font-size:12.5px;">
+          <div>
+            <strong>${escapeHtml(t.nome)}</strong>
+            <span style="color:var(--muted);"> · ${labelTipoTitolare(t.tipo)}${t.percentuale ? ' · ' + t.percentuale + '%' : ''}</span>
+            ${t.codice_fiscale ? `<div style="color:var(--muted); font-size:11.5px;">CF: ${escapeHtml(t.codice_fiscale)}</div>` : ''}
+          </div>
+          <button class="btn-elimina-titolare" data-id="${t.id}" style="background:none; border:none; color:var(--red);">✕</button>
+        </div>
+      `).join('')}
+      ${titolari.length === 0 ? '<div style="font-size:12.5px; color:var(--muted);">Nessun titolare registrato.</div>' : ''}
+    </div>
+
+    <div id="mdu-form-nuovo" style="display:none; border-top:1px solid var(--border); padding-top:12px; margin-top:4px; flex-direction:column; gap:10px;">
+      <div><label class="field-label">Nome</label><input id="mt-nome" placeholder="Nome e cognome"></div>
+      <div class="form-row">
+        <div>
+          <label class="field-label">Tipo</label>
+          <select id="mt-tipo" style="width:100%;">
+            <option value="proprietario">Proprietario</option>
+            <option value="nudo_proprietario">Nudo proprietario</option>
+            <option value="usufruttuario">Usufruttuario</option>
+            <option value="inquilino">Inquilino</option>
+          </select>
+        </div>
+        <div><label class="field-label">% competenza</label><input id="mt-percentuale" type="number" step="0.01" placeholder="opzionale"></div>
+      </div>
+      <div><label class="field-label">Codice fiscale</label><input id="mt-cf" placeholder="opzionale"></div>
+      <div class="form-row">
+        <div><label class="field-label">Email</label><input id="mt-email" placeholder="opzionale"></div>
+        <div><label class="field-label">Telefono</label><input id="mt-telefono" placeholder="opzionale"></div>
+      </div>
+      <button class="btn btn-primary" style="justify-content:center;" id="mt-salva">Salva titolare</button>
+    </div>
+  `;
+
+  document.getElementById('mdu-aggiungi-titolare').onclick = () => {
+    const form = document.getElementById('mdu-form-nuovo');
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+  };
+
+  document.getElementById('mt-salva').onclick = async () => {
+    const nome = document.getElementById('mt-nome').value.trim();
+    if (!nome) return;
+    await api(`/unita/${unita.id}/titolari`, { method: 'POST', body: JSON.stringify({
+      nome,
+      tipo: document.getElementById('mt-tipo').value,
+      percentuale: document.getElementById('mt-percentuale').value || null,
+      codice_fiscale: document.getElementById('mt-cf').value.trim(),
+      email: document.getElementById('mt-email').value.trim(),
+      telefono: document.getElementById('mt-telefono').value.trim(),
+    })});
+    const nuoviTitolari = await api(`/unita/${unita.id}/titolari`);
+    renderDettaglioUnitaBody(unita, datiCatastali, nuoviTitolari);
+  };
+
+  document.querySelectorAll('.btn-elimina-titolare').forEach(btn => {
+    btn.onclick = async () => {
+      await api(`/titolari/${btn.dataset.id}`, { method: 'DELETE' });
+      const nuoviTitolari = await api(`/unita/${unita.id}/titolari`);
+      renderDettaglioUnitaBody(unita, datiCatastali, nuoviTitolari);
+    };
+  });
+}
+
+
   const oggi = new Date().toISOString().slice(0, 10);
   apriModale(`
     <div class="modale-header"><h3>Nuova spesa condominiale</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
@@ -728,8 +844,10 @@ function collegaEventi(condominio) {
     render();
   };
 
-  const btnNuovoCond = document.getElementById('btn-nuovo-condominio') || document.getElementById('btn-crea-primo');
-  if (btnNuovoCond) btnNuovoCond.onclick = modaleNuovoCondominio;
+  const btnNuovoCondSidebar = document.getElementById('btn-nuovo-condominio');
+  if (btnNuovoCondSidebar) btnNuovoCondSidebar.onclick = modaleNuovoCondominio;
+  const btnCreaPrimo = document.getElementById('btn-crea-primo');
+  if (btnCreaPrimo) btnCreaPrimo.onclick = modaleNuovoCondominio;
 
   const btnLogout = document.getElementById('btn-logout');
   if (btnLogout) btnLogout.onclick = async () => {
@@ -752,6 +870,13 @@ function collegaEventi(condominio) {
   if (inputRicerca) inputRicerca.oninput = (e) => { stato.ricercaUnita = e.target.value; render(); };
   const btnNuovaUnita = document.getElementById('btn-nuova-unita');
   if (btnNuovaUnita) btnNuovaUnita.onclick = modaleNuovaUnita;
+  document.querySelectorAll('.riga-unita').forEach(tr => {
+    tr.onclick = (e) => {
+      if (e.target.closest('.btn-elimina-unita')) return;
+      const u = stato.unita.find(x => x.id === tr.dataset.id);
+      if (u) modaleDettaglioUnita(u);
+    };
+  });
   document.querySelectorAll('.btn-elimina-unita').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Eliminare questa unità?')) return;

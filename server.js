@@ -129,7 +129,7 @@ app.get('/api/condomini/:condominioId/unita', async (req, res) => {
 });
 
 app.post('/api/condomini/:condominioId/unita', async (req, res) => {
-  const { interno, piano, proprietario, email, telefono, millesimi } = req.body;
+  const { interno, piano, proprietario, email, telefono, millesimi, catasto_foglio, catasto_particella, catasto_subalterno } = req.body;
   if (!interno || !proprietario || millesimi == null) {
     return res.status(400).json({ errore: 'Interno, proprietario e millesimi sono obbligatori.' });
   }
@@ -139,18 +139,33 @@ app.post('/api/condomini/:condominioId/unita', async (req, res) => {
       condominio_id: req.params.condominioId,
       interno, piano: piano || null, proprietario, email, telefono,
       millesimi: Number(millesimi),
+      catasto_foglio: catasto_foglio || null,
+      catasto_particella: catasto_particella || null,
+      catasto_subalterno: catasto_subalterno || null,
     })
     .select()
     .single();
   if (error) return res.status(500).json({ errore: error.message });
+
+  // Crea automaticamente il primo titolare (proprietario) cosi' l'unita'
+  // ha sempre almeno una persona registrata nel registro anagrafe.
+  await supabase.from('titolari').insert({
+    unita_id: data.id, nome: proprietario, tipo: 'proprietario', email, telefono,
+  });
+
   res.json(data);
 });
 
 app.put('/api/unita/:id', async (req, res) => {
-  const { interno, piano, proprietario, email, telefono, millesimi } = req.body;
+  const { interno, piano, proprietario, email, telefono, millesimi, catasto_foglio, catasto_particella, catasto_subalterno } = req.body;
   const { data, error } = await supabase
     .from('unita')
-    .update({ interno, piano, proprietario, email, telefono, millesimi: Number(millesimi) })
+    .update({
+      interno, piano, proprietario, email, telefono, millesimi: Number(millesimi),
+      catasto_foglio: catasto_foglio || null,
+      catasto_particella: catasto_particella || null,
+      catasto_subalterno: catasto_subalterno || null,
+    })
     .eq('id', req.params.id)
     .select()
     .single();
@@ -160,6 +175,64 @@ app.put('/api/unita/:id', async (req, res) => {
 
 app.delete('/api/unita/:id', async (req, res) => {
   const { error } = await supabase.from('unita').delete().eq('id', req.params.id);
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json({ ok: true });
+});
+
+// ------------------------------------------------------------
+// TITOLARI — proprietari, nudi proprietari, usufruttuari, inquilini
+// collegati a una stessa unita' (Registro di Anagrafe Condominiale)
+// ------------------------------------------------------------
+app.get('/api/unita/:unitaId/titolari', async (req, res) => {
+  const { data, error } = await supabase
+    .from('titolari')
+    .select('*')
+    .eq('unita_id', req.params.unitaId)
+    .order('created_at', { ascending: true });
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.post('/api/unita/:unitaId/titolari', async (req, res) => {
+  const { nome, tipo, codice_fiscale, email, telefono, percentuale } = req.body;
+  const tipiValidi = ['proprietario', 'nudo_proprietario', 'usufruttuario', 'inquilino'];
+  if (!nome) return res.status(400).json({ errore: 'Il nome del titolare e\' obbligatorio.' });
+  if (tipo && !tipiValidi.includes(tipo)) return res.status(400).json({ errore: 'Tipo titolare non valido.' });
+
+  const { data, error } = await supabase
+    .from('titolari')
+    .insert({
+      unita_id: req.params.unitaId,
+      nome, tipo: tipo || 'proprietario',
+      codice_fiscale: codice_fiscale || null,
+      email: email || null, telefono: telefono || null,
+      percentuale: percentuale != null ? Number(percentuale) : null,
+    })
+    .select()
+    .single();
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.put('/api/titolari/:id', async (req, res) => {
+  const { nome, tipo, codice_fiscale, email, telefono, percentuale } = req.body;
+  const { data, error } = await supabase
+    .from('titolari')
+    .update({
+      nome, tipo,
+      codice_fiscale: codice_fiscale || null,
+      email: email || null, telefono: telefono || null,
+      percentuale: percentuale != null ? Number(percentuale) : null,
+    })
+    .eq('id', req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(500).json({ errore: error.message });
+  res.json(data);
+});
+
+app.delete('/api/titolari/:id', async (req, res) => {
+  const { error } = await supabase.from('titolari').delete().eq('id', req.params.id);
   if (error) return res.status(500).json({ errore: error.message });
   res.json({ ok: true });
 });
