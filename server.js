@@ -28,6 +28,10 @@ app.use(express.json());
 app.use(cookieParser());
 app.use(express.static('public'));
 
+// Redirect dalla root a login
+app.get('/', (req, res) => res.redirect('/login.html'));
+app.get('/gestionale', (req, res) => res.redirect('/gestionale.html'));
+
 // ------------------------------------------------------------
 // AUTH
 // ------------------------------------------------------------
