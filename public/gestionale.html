@@ -281,19 +281,40 @@ async function caricaCondomini() {
 }
 
 async function caricaDatiCondominio() {
-  if (!stato.condominioId) { stato.unita = []; stato.spese = []; stato.quote = []; stato.dashboard = null; stato.edifici = []; return; }
-  const [unita, spese, quote, dashboard, edifici] = await Promise.all([
+  if (!stato.condominioId) {
+    stato.unita = []; stato.spese = []; stato.quote = []; stato.dashboard = null;
+    stato.edifici = []; stato.nominativi = []; stato.fornitori = [];
+    stato.tabelle_millesimali = []; stato.esercizi = [];
+    stato.fatture_passive = []; stato.registro_conto = []; stato.saldo_registro = null;
+    return;
+  }
+  const [unita, spese, quote, dashboard, edifici, nominativi, fornitori,
+    tabelle_millesimali, esercizi, fatture_passive, registro_conto, saldo_registro] = await Promise.all([
     api(`/condomini/${stato.condominioId}/unita`),
     api(`/condomini/${stato.condominioId}/spese`),
     api(`/condomini/${stato.condominioId}/quote`),
     api(`/condomini/${stato.condominioId}/dashboard`),
     api(`/condomini/${stato.condominioId}/edifici`),
+    api('/nominativi'),
+    api('/fornitori'),
+    api(`/condomini/${stato.condominioId}/tabelle-millesimali`),
+    api(`/condomini/${stato.condominioId}/esercizi`),
+    api(`/condomini/${stato.condominioId}/fatture-passive`),
+    api(`/condomini/${stato.condominioId}/registro-conto`),
+    api(`/condomini/${stato.condominioId}/saldo-registro`),
   ]);
   stato.unita = unita;
   stato.spese = spese;
   stato.quote = quote;
   stato.dashboard = dashboard;
   stato.edifici = edifici;
+  stato.nominativi = nominativi;
+  stato.fornitori = fornitori;
+  stato.tabelle_millesimali = tabelle_millesimali;
+  stato.esercizi = esercizi;
+  stato.fatture_passive = fatture_passive;
+  stato.registro_conto = registro_conto;
+  stato.saldo_registro = saldo_registro;
 }
 
 async function ricaricaTutto() {
@@ -324,6 +345,12 @@ function render() {
       <nav class="nav">
         ${navItem('dashboard', 'Quadro generale')}
         ${navItem('unita', 'Anagrafica unità')}
+        ${navItem('nominativi', 'Nominativi')}
+        ${navItem('fornitori', 'Fornitori')}
+        ${navItem('millesimi', 'Tabelle millesimali')}
+        ${navItem('esercizi', 'Esercizi')}
+        ${navItem('fatture', 'Fatture passive')}
+        ${navItem('registro', 'Registro conto')}
         ${navItem('spese', 'Spese e ripartizioni')}
         ${navItem('scadenzario', 'Scadenzario')}
       </nav>
@@ -364,6 +391,12 @@ function renderContenuto(condominio) {
   let corpo = '';
   if (stato.vista === 'dashboard') corpo = renderDashboard();
   else if (stato.vista === 'unita') corpo = renderUnita();
+  else if (stato.vista === 'nominativi') corpo = renderNominativi();
+  else if (stato.vista === 'fornitori') corpo = renderFornitori();
+  else if (stato.vista === 'millesimi') corpo = renderMillesimi();
+  else if (stato.vista === 'esercizi') corpo = renderEsercizi();
+  else if (stato.vista === 'fatture') corpo = renderFatture();
+  else if (stato.vista === 'registro') corpo = renderRegistro();
   else if (stato.vista === 'spese') corpo = renderSpese();
   else if (stato.vista === 'scadenzario') corpo = renderScadenzario();
 
@@ -560,6 +593,236 @@ function rigaUnita(u) {
 }
 
 // ---------- Vista spese ----------
+// ---------- Vista nominativi ----------
+function renderNominativi() {
+  const noms = stato.nominativi || [];
+  return `
+    <div class="toolbar">
+      <p style="font-size:13px; color:var(--muted); align-self:center;">Rubrica persone fisiche: proprietari, inquilini, usufruttuari.</p>
+      <button class="btn btn-primary" id="btn-nuovo-nominativo">+ Nuovo nominativo</button>
+    </div>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr>
+          <th>Cognome e nome</th><th>Codice fiscale</th><th>Contatti</th><th>Città</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${noms.map(n => `
+            <tr class="riga-nominativo" data-id="${n.id}" style="cursor:pointer;">
+              <td style="font-weight:500;">${escapeHtml(n.cognome)} ${escapeHtml(n.nome)}</td>
+              <td style="font-size:12px; color:var(--muted);">${escapeHtml(n.codice_fiscale || '—')}</td>
+              <td style="font-size:12px; color:var(--muted);">${escapeHtml(n.email || n.telefono || '—')}</td>
+              <td style="font-size:12px; color:var(--muted);">${escapeHtml(n.citta || '—')}</td>
+              <td style="text-align:right;">
+                <button class="btn-elimina-nominativo" data-id="${n.id}" style="background:none; border:none; color:var(--red);">✕</button>
+              </td>
+            </tr>
+          `).join('')}
+          ${noms.length === 0 ? `<tr><td colspan="5" class="vuoto">Nessun nominativo in rubrica.</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ---------- Vista fornitori ----------
+function renderFornitori() {
+  const forn = stato.fornitori || [];
+  return `
+    <div class="toolbar">
+      <p style="font-size:13px; color:var(--muted); align-self:center;">Rubrica aziende e professionisti con dati fiscali completi.</p>
+      <button class="btn btn-primary" id="btn-nuovo-fornitore">+ Nuovo fornitore</button>
+    </div>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr>
+          <th>Ragione sociale</th><th>P.IVA</th><th>Categoria</th><th>Ritenuta</th><th>DURC scade</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${forn.map(f => `
+            <tr class="riga-fornitore" data-id="${f.id}" style="cursor:pointer;">
+              <td style="font-weight:500;">${escapeHtml(f.ragione_sociale)}</td>
+              <td style="font-size:12px; color:var(--muted);">${escapeHtml(f.partita_iva || '—')}</td>
+              <td style="font-size:12px; color:var(--muted);">${escapeHtml(f.categoria || '—')}</td>
+              <td style="font-size:12px;">
+                ${f.soggetto_ritenuta_acconto
+                  ? `<span class="badge emesso">${f.percentuale_ritenuta}%</span>`
+                  : '<span style="color:var(--muted); font-size:12px;">No</span>'}
+              </td>
+              <td style="font-size:12px; ${f.durc_scadenza && new Date(f.durc_scadenza) < new Date() ? 'color:var(--red); font-weight:600;' : 'color:var(--muted);'}">
+                ${f.durc_scadenza ? formatData(f.durc_scadenza) : '—'}
+              </td>
+              <td style="text-align:right;">
+                <button class="btn-elimina-fornitore" data-id="${f.id}" style="background:none; border:none; color:var(--red);">✕</button>
+              </td>
+            </tr>
+          `).join('')}
+          ${forn.length === 0 ? `<tr><td colspan="6" class="vuoto">Nessun fornitore in rubrica.</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+// ---------- Vista tabelle millesimali ----------
+function renderMillesimi() {
+  const tabelle = stato.tabelle_millesimali || [];
+  return `
+    <div class="toolbar">
+      <p style="font-size:13px; color:var(--muted); align-self:center;">Tabelle di ripartizione millesimale per categoria di spesa.</p>
+      <button class="btn btn-primary" id="btn-nuova-tabella-mill">+ Nuova tabella</button>
+    </div>
+    ${tabelle.map(t => `
+      <div class="card" style="margin-bottom:14px;">
+        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:12px;">
+          <div>
+            <strong style="font-size:14px; color:var(--navy);">${escapeHtml(t.nome)}</strong>
+            ${t.predefinita ? '<span class="badge pagato" style="margin-left:8px;">Predefinita</span>' : ''}
+            <div style="font-size:12px; color:var(--muted); margin-top:2px;">${escapeHtml(t.descrizione || '')} · Totale: ${t.totale}‰</div>
+          </div>
+          <button class="btn-elimina-tabella-mill" data-id="${t.id}" style="background:none; border:none; color:var(--red); font-size:12px;">Elimina</button>
+        </div>
+        <table>
+          <thead><tr><th>Unità</th><th>Proprietario</th><th>Millesimi</th></tr></thead>
+          <tbody>
+            ${(t.valori_millesimali || []).map(v => `
+              <tr>
+                <td>${escapeHtml(v.unita?.interno || '—')}</td>
+                <td style="color:var(--muted);">${escapeHtml(v.unita?.proprietario || '—')}</td>
+                <td>
+                  <input type="number" step="0.0001" value="${v.valore}"
+                    class="input-valore-mill" data-tabella="${t.id}" data-unita="${v.unita_id}" data-condominio="${stato.condominioId}"
+                    style="width:100px; padding:4px 6px; font-size:13px; border:1px solid var(--border); border-radius:4px;">
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+        <button class="btn btn-secondary btn-sm btn-salva-mill" data-tabella="${t.id}" style="margin-top:10px;">Salva valori</button>
+      </div>
+    `).join('')}
+    ${tabelle.length === 0 ? '<div class="card vuoto">Nessuna tabella millesimale. Creane una per iniziare.</div>' : ''}
+  `;
+}
+
+// ---------- Vista esercizi ----------
+function renderEsercizi() {
+  const esercizi = stato.esercizi || [];
+  return `
+    <div class="toolbar">
+      <p style="font-size:13px; color:var(--muted); align-self:center;">Anni contabili del condominio con piano dei conti e gruppi rate.</p>
+      <button class="btn btn-primary" id="btn-nuovo-esercizio">+ Nuovo esercizio</button>
+    </div>
+    ${esercizi.map(e => `
+      <div class="card" style="margin-bottom:12px; cursor:pointer;" onclick="apriEsercizio('${e.id}')">
+        <div style="display:flex; justify-content:space-between; align-items:center;">
+          <div>
+            <strong style="font-size:14px; color:var(--navy);">${escapeHtml(e.nome)}</strong>
+            <div style="font-size:12px; color:var(--muted); margin-top:2px;">${formatData(e.data_inizio)} → ${formatData(e.data_fine)}</div>
+          </div>
+          <span class="badge ${e.stato === 'aperto' ? 'pagato' : e.stato === 'chiuso' ? 'da_emettere' : 'emesso'}">${e.stato}</span>
+        </div>
+      </div>
+    `).join('')}
+    ${esercizi.length === 0 ? '<div class="card vuoto">Nessun esercizio. Crea il primo anno contabile.</div>' : ''}
+
+    <div id="dettaglio-esercizio"></div>
+  `;
+}
+
+// ---------- Vista fatture passive ----------
+function renderFatture() {
+  const fatture = stato.fatture_passive || [];
+  const totDaPagare = fatture.filter(f => f.stato === 'da_pagare').reduce((s, f) => s + Number(f.importo_da_pagare || 0), 0);
+  return `
+    <div class="toolbar">
+      <div style="align-self:center;">
+        <span style="font-size:13px; color:var(--muted);">Da pagare: </span>
+        <strong style="color:var(--red);">${formatEUR(totDaPagare)}</strong>
+      </div>
+      <button class="btn btn-primary" id="btn-nuova-fattura">+ Nuova fattura</button>
+    </div>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr>
+          <th>Data</th><th>Fornitore</th><th>N° fattura</th><th>Imponibile</th><th>Totale</th><th>Scadenza</th><th>Stato</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${fatture.map(f => `
+            <tr>
+              <td style="font-size:12px;">${formatData(f.data_fattura)}</td>
+              <td style="font-weight:500;">${escapeHtml(f.fornitori?.ragione_sociale || f.descrizione || '—')}</td>
+              <td style="font-size:12px; color:var(--muted);">${escapeHtml(f.numero_fattura || '—')}</td>
+              <td>${formatEUR(f.imponibile)}</td>
+              <td style="font-weight:500;">${formatEUR(f.importo_totale)}</td>
+              <td style="font-size:12px; ${f.data_scadenza_pagamento && new Date(f.data_scadenza_pagamento) < new Date() && f.stato === 'da_pagare' ? 'color:var(--red); font-weight:600;' : 'color:var(--muted);'}">${formatData(f.data_scadenza_pagamento)}</td>
+              <td><span class="badge ${f.stato === 'pagata' ? 'pagato' : f.stato === 'da_pagare' ? 'scaduto' : 'emesso'}">${labelStatoFattura(f.stato)}</span></td>
+              <td style="text-align:right; display:flex; gap:4px; align-items:center;">
+                ${f.stato !== 'pagata' ? `<button class="btn btn-sm btn-segna-pagata" data-id="${f.id}" style="color:var(--green); border:1px solid #c8e0ce; background:none;">Pagata</button>` : ''}
+              </td>
+            </tr>
+          `).join('')}
+          ${fatture.length === 0 ? `<tr><td colspan="8" class="vuoto">Nessuna fattura registrata.</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
+function labelStatoFattura(s) {
+  return { da_pagare: 'Da pagare', pagata: 'Pagata', parzialmente_pagata: 'Parz. pagata', contestata: 'Contestata', annullata: 'Annullata' }[s] || s;
+}
+
+// ---------- Vista registro conto ----------
+function renderRegistro() {
+  const movimenti = stato.registro_conto || [];
+  const saldo = stato.saldo_registro || { totale_entrate: 0, totale_uscite: 0, saldo: 0 };
+  return `
+    <div class="metrics" style="margin-bottom:16px;">
+      <div class="metric-card">
+        <div class="metric-label">Totale entrate</div>
+        <div class="metric-value" style="color:var(--green);">${formatEUR(saldo.totale_entrate)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Totale uscite</div>
+        <div class="metric-value" style="color:var(--red);">${formatEUR(saldo.totale_uscite)}</div>
+      </div>
+      <div class="metric-card">
+        <div class="metric-label">Saldo</div>
+        <div class="metric-value" style="color:${Number(saldo.saldo) >= 0 ? 'var(--green)' : 'var(--red)'};">${formatEUR(saldo.saldo)}</div>
+      </div>
+    </div>
+    <div class="toolbar">
+      <p style="font-size:13px; color:var(--muted); align-self:center;">Registro movimenti contabili del conto corrente condominiale.</p>
+      <button class="btn btn-primary" id="btn-nuovo-movimento">+ Nuovo movimento</button>
+    </div>
+    <div class="card" style="padding:0;">
+      <table>
+        <thead><tr>
+          <th>Data</th><th>Descrizione</th><th>Tipo</th><th>Importo</th><th>Saldo</th><th></th>
+        </tr></thead>
+        <tbody>
+          ${movimenti.map(m => `
+            <tr>
+              <td style="font-size:12px;">${formatData(m.data_movimento)}</td>
+              <td>${escapeHtml(m.descrizione)}${m.fornitori ? ` <span style="color:var(--muted); font-size:11px;">· ${escapeHtml(m.fornitori.ragione_sociale)}</span>` : ''}</td>
+              <td><span class="badge ${m.tipo === 'entrata' ? 'pagato' : 'scaduto'}">${m.tipo}</span></td>
+              <td style="font-weight:500; color:${m.tipo === 'entrata' ? 'var(--green)' : 'var(--red)'};">
+                ${m.tipo === 'entrata' ? '+' : '-'}${formatEUR(m.importo)}
+              </td>
+              <td style="font-weight:500; color:${Number(m.saldo_progressivo) >= 0 ? 'var(--green)' : 'var(--red)'};">${formatEUR(m.saldo_progressivo)}</td>
+              <td style="text-align:right;">
+                <button class="btn-elimina-movimento" data-id="${m.id}" style="background:none; border:none; color:var(--red);">✕</button>
+              </td>
+            </tr>
+          `).join('')}
+          ${movimenti.length === 0 ? `<tr><td colspan="6" class="vuoto">Nessun movimento registrato.</td></tr>` : ''}
+        </tbody>
+      </table>
+    </div>
+  `;
+}
+
 function renderSpese() {
   return `
     <div class="toolbar">
@@ -1016,6 +1279,424 @@ function modaleNuovaSpesa() {
   };
 }
 
+function modaleNuovoNominativo() {
+  apriModale(`
+    <div class="modale-header"><h3>Nuovo nominativo</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div class="form-row">
+        <div style="flex:0.4;"><label class="field-label">Titolo</label>
+          <select id="mn-titolo" style="width:100%;">
+            <option value="">—</option>
+            <option>Egregio Signore</option><option>Gentile Signora</option>
+            <option>Spett.le</option><option>Dott.</option><option>Ing.</option><option>Geom.</option>
+          </select>
+        </div>
+        <div style="flex:1;"><label class="field-label">Cognome *</label><input id="mn-cognome" placeholder="Cognome"></div>
+        <div style="flex:1;"><label class="field-label">Nome *</label><input id="mn-nome" placeholder="Nome"></div>
+      </div>
+      <div class="form-row">
+        <div><label class="field-label">Codice fiscale</label><input id="mn-cf" placeholder="RSSMRA80A01H501U" style="text-transform:uppercase;"></div>
+        <div><label class="field-label">Sesso</label>
+          <select id="mn-sesso" style="width:100%;"><option value="">—</option><option value="M">Maschio</option><option value="F">Femmina</option></select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div><label class="field-label">Data di nascita</label><input id="mn-nascita" type="date"></div>
+        <div><label class="field-label">Comune di nascita</label><input id="mn-comune-nascita" placeholder="es. Milano"></div>
+        <div><label class="field-label">Prov.</label><input id="mn-prov-nascita" placeholder="MI" style="text-transform:uppercase;"></div>
+      </div>
+      <div style="border-top:1px solid var(--border); padding-top:10px; margin-top:2px;">
+        <label class="field-label" style="font-weight:600; margin-bottom:8px;">Recapiti</label>
+        <div class="form-row">
+          <div><label class="field-label">Email</label><input id="mn-email" placeholder="email@esempio.it"></div>
+          <div><label class="field-label">Telefono</label><input id="mn-telefono" placeholder="02 1234567"></div>
+          <div><label class="field-label">Cellulare</label><input id="mn-cellulare" placeholder="333 1234567"></div>
+        </div>
+        <div class="form-row">
+          <div style="flex:2;"><label class="field-label">Indirizzo</label><input id="mn-indirizzo" placeholder="Via Roma 1"></div>
+          <div><label class="field-label">CAP</label><input id="mn-cap" placeholder="20100"></div>
+        </div>
+        <div class="form-row">
+          <div><label class="field-label">Città</label><input id="mn-citta" placeholder="Milano"></div>
+          <div><label class="field-label">Provincia</label><input id="mn-provincia" placeholder="MI" style="text-transform:uppercase;"></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="mn-salva">Salva nominativo</button>
+    </div>
+  `, 520);
+  document.getElementById('mn-salva').onclick = async () => {
+    const cognome = document.getElementById('mn-cognome').value.trim();
+    const nome = document.getElementById('mn-nome').value.trim();
+    if (!cognome || !nome) return;
+    try {
+      await api('/nominativi', { method: 'POST', body: JSON.stringify({
+        titolo: document.getElementById('mn-titolo').value,
+        cognome, nome,
+        codice_fiscale: document.getElementById('mn-cf').value.trim().toUpperCase(),
+        sesso: document.getElementById('mn-sesso').value,
+        data_nascita: document.getElementById('mn-nascita').value || null,
+        comune_nascita: document.getElementById('mn-comune-nascita').value.trim(),
+        provincia_nascita: document.getElementById('mn-prov-nascita').value.trim().toUpperCase(),
+        email: document.getElementById('mn-email').value.trim(),
+        telefono: document.getElementById('mn-telefono').value.trim(),
+        cellulare: document.getElementById('mn-cellulare').value.trim(),
+        indirizzo: document.getElementById('mn-indirizzo').value.trim(),
+        cap: document.getElementById('mn-cap').value.trim(),
+        citta: document.getElementById('mn-citta').value.trim(),
+        provincia: document.getElementById('mn-provincia').value.trim().toUpperCase(),
+      })});
+      chiudiModale();
+      await caricaDatiCondominio();
+      render();
+    } catch (err) { alert(err.message); }
+  };
+}
+
+function modaleNuovoFornitore() {
+  apriModale(`
+    <div class="modale-header"><h3>Nuovo fornitore</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div><label class="field-label">Ragione sociale *</label><input id="mf-rs" placeholder="Nome azienda o professionista"></div>
+      <div class="form-row">
+        <div><label class="field-label">Partita IVA</label><input id="mf-piva" placeholder="IT12345678901"></div>
+        <div><label class="field-label">Codice fiscale</label><input id="mf-cf" placeholder="opzionale"></div>
+      </div>
+      <div class="form-row">
+        <div><label class="field-label">Codice SDI</label><input id="mf-sdi" placeholder="7 caratteri" maxlength="7"></div>
+        <div><label class="field-label">PEC fatturazione</label><input id="mf-pec-fatt" placeholder="fatture@pec.it"></div>
+      </div>
+      <div><label class="field-label">Categoria</label>
+        <select id="mf-categoria" style="width:100%;">
+          <option value="">— Nessuna —</option>
+          <option>Manutenzioni</option><option>Pulizie</option><option>Giardinaggio</option>
+          <option>Ascensori</option><option>Impianti elettrici</option><option>Idraulica</option>
+          <option>Assicurazioni</option><option>Amministrazione</option><option>Consulenza</option><option>Altro</option>
+        </select>
+      </div>
+      <div style="border-top:1px solid var(--border); padding-top:10px; margin-top:4px;">
+        <label class="field-label" style="font-weight:600; margin-bottom:8px;">Dati fiscali</label>
+        <div class="form-row">
+          <div><label class="field-label">Regime fiscale</label>
+            <select id="mf-regime" style="width:100%;">
+              <option>Ordinario</option><option>Forfettario</option><option>Minimo</option>
+            </select>
+          </div>
+          <div style="display:flex; align-items:flex-end; gap:8px; padding-bottom:1px;">
+            <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer;">
+              <input type="checkbox" id="mf-sogg-iva" checked> Soggetto IVA
+            </label>
+            <input id="mf-aliq-iva" type="number" value="22" style="width:60px; padding:6px;">
+            <span style="font-size:12px; color:var(--muted);">%</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div style="display:flex; align-items:center; gap:8px;">
+            <label style="display:flex; align-items:center; gap:5px; font-size:12.5px; cursor:pointer;">
+              <input type="checkbox" id="mf-sogg-ritenuta"> Ritenuta d'acconto
+            </label>
+            <input id="mf-perc-ritenuta" type="number" value="4" style="width:55px; padding:6px;">
+            <span style="font-size:12px; color:var(--muted);">%</span>
+          </div>
+        </div>
+        <div class="form-row">
+          <div><label class="field-label">Scadenza DURC</label><input id="mf-durc" type="date"></div>
+          <div><label class="field-label">Email</label><input id="mf-email" placeholder="info@azienda.it"></div>
+        </div>
+      </div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="mf-salva">Salva fornitore</button>
+    </div>
+  `, 520);
+  document.getElementById('mf-salva').onclick = async () => {
+    const ragione_sociale = document.getElementById('mf-rs').value.trim();
+    if (!ragione_sociale) return;
+    try {
+      await api('/fornitori', { method: 'POST', body: JSON.stringify({
+        ragione_sociale,
+        partita_iva: document.getElementById('mf-piva').value.trim(),
+        codice_fiscale: document.getElementById('mf-cf').value.trim(),
+        codice_sdi: document.getElementById('mf-sdi').value.trim(),
+        pec_fatturazione: document.getElementById('mf-pec-fatt').value.trim(),
+        categoria: document.getElementById('mf-categoria').value,
+        regime_fiscale: document.getElementById('mf-regime').value,
+        soggetto_iva: document.getElementById('mf-sogg-iva').checked,
+        aliquota_iva: Number(document.getElementById('mf-aliq-iva').value),
+        soggetto_ritenuta_acconto: document.getElementById('mf-sogg-ritenuta').checked,
+        percentuale_ritenuta: Number(document.getElementById('mf-perc-ritenuta').value),
+        durc_scadenza: document.getElementById('mf-durc').value || null,
+        email: document.getElementById('mf-email').value.trim(),
+      })});
+      chiudiModale();
+      await caricaDatiCondominio();
+      render();
+    } catch (err) { alert(err.message); }
+  };
+}
+
+function modaleNuovaTabellaMillesimale() {
+  apriModale(`
+    <div class="modale-header"><h3>Nuova tabella millesimale</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div class="form-row">
+        <div style="flex:0.3;"><label class="field-label">Codice</label><input id="ntm-codice" placeholder="es. B"></div>
+        <div><label class="field-label">Nome *</label><input id="ntm-nome" placeholder="es. Tabella B - Scale"></div>
+      </div>
+      <div><label class="field-label">Descrizione</label><input id="ntm-desc" placeholder="es. Spese di scala"></div>
+      <div><label class="field-label">Totale millesimi</label><input id="ntm-totale" type="number" value="1000"></div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="ntm-salva">Crea tabella</button>
+    </div>
+  `);
+  document.getElementById('ntm-salva').onclick = async () => {
+    const nome = document.getElementById('ntm-nome').value.trim();
+    if (!nome) return;
+    await api(`/condomini/${stato.condominioId}/tabelle-millesimali`, { method: 'POST', body: JSON.stringify({
+      nome, codice: document.getElementById('ntm-codice').value.trim(),
+      descrizione: document.getElementById('ntm-desc').value.trim(),
+      totale: Number(document.getElementById('ntm-totale').value) || 1000,
+    })});
+    chiudiModale();
+    await caricaDatiCondominio();
+    render();
+  };
+}
+
+function modaleNuovoEsercizio() {
+  const anno = new Date().getFullYear();
+  apriModale(`
+    <div class="modale-header"><h3>Nuovo esercizio</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div><label class="field-label">Nome *</label><input id="ne-nome" value="Esercizio ${anno}" placeholder="es. Esercizio 2024"></div>
+      <div class="form-row">
+        <div><label class="field-label">Data inizio</label><input id="ne-inizio" type="date" value="${anno}-01-01"></div>
+        <div><label class="field-label">Data fine</label><input id="ne-fine" type="date" value="${anno}-12-31"></div>
+      </div>
+      <div><label class="field-label">Note</label><input id="ne-note" placeholder="opzionale"></div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="ne-salva">Crea esercizio</button>
+    </div>
+  `);
+  document.getElementById('ne-salva').onclick = async () => {
+    const nome = document.getElementById('ne-nome').value.trim();
+    if (!nome) return;
+    await api(`/condomini/${stato.condominioId}/esercizi`, { method: 'POST', body: JSON.stringify({
+      nome, data_inizio: document.getElementById('ne-inizio').value,
+      data_fine: document.getElementById('ne-fine').value,
+      note: document.getElementById('ne-note').value.trim(),
+    })});
+    chiudiModale();
+    await caricaDatiCondominio();
+    render();
+  };
+}
+
+async function apriEsercizio(esercizioId) {
+  const esercizio = stato.esercizi.find(e => e.id === esercizioId);
+  if (!esercizio) return;
+  const [pianoConti, gruppiRate] = await Promise.all([
+    api(`/esercizi/${esercizioId}/piano-conti`),
+    api(`/esercizi/${esercizioId}/gruppi-rate`),
+  ]);
+  const tabelleOpt = (stato.tabelle_millesimali || []).map(t => `<option value="${t.id}">${escapeHtml(t.nome)}</option>`).join('');
+  const totPreventivo = pianoConti.filter(p => p.tipo === 'uscita').reduce((s, p) => s + Number(p.importo_preventivo), 0);
+
+  apriModale(`
+    <div class="modale-header"><h3>${escapeHtml(esercizio.nome)}</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div style="font-size:12px; color:var(--muted); margin-bottom:14px;">${formatData(esercizio.data_inizio)} → ${formatData(esercizio.data_fine)} · Preventivo totale: <strong>${formatEUR(totPreventivo)}</strong></div>
+
+      <div style="font-weight:600; font-size:13px; color:var(--navy); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+        Piano dei conti
+        <button class="btn btn-secondary btn-sm" id="btn-add-conto">+ Voce</button>
+      </div>
+      <table style="margin-bottom:14px;">
+        <thead><tr><th>Cod.</th><th>Categoria</th><th>Preventivo</th><th>Tabella mill.</th><th></th></tr></thead>
+        <tbody id="tbody-piano-conti">
+          ${pianoConti.map(p => `
+            <tr>
+              <td style="font-size:11px; color:var(--muted);">${escapeHtml(p.codice || '')}</td>
+              <td>${escapeHtml(p.categoria)}${p.sottocategoria ? ` <span style="color:var(--muted); font-size:11px;">· ${escapeHtml(p.sottocategoria)}</span>` : ''}</td>
+              <td style="font-weight:500;">${formatEUR(p.importo_preventivo)}</td>
+              <td style="font-size:11px; color:var(--muted);">${escapeHtml(p.tabelle_millesimali?.nome || '—')}</td>
+              <td><button class="btn-del-conto" data-id="${p.id}" style="background:none; border:none; color:var(--red);">✕</button></td>
+            </tr>
+          `).join('')}
+        </tbody>
+      </table>
+
+      <div style="font-weight:600; font-size:13px; color:var(--navy); margin-bottom:8px; display:flex; justify-content:space-between; align-items:center;">
+        Gruppi rate
+        <button class="btn btn-secondary btn-sm" id="btn-add-gruppo-rate">+ Gruppo</button>
+      </div>
+      ${gruppiRate.map(g => `
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:7px 10px; background:var(--bg); border-radius:6px; font-size:12.5px; margin-bottom:6px;">
+          <strong>${escapeHtml(g.nome)}</strong>
+          <span style="color:var(--muted);">${g.num_rate} rate · ${formatEUR(g.importo_totale)}</span>
+        </div>
+      `).join('')}
+      ${gruppiRate.length === 0 ? '<div style="font-size:12px; color:var(--muted);">Nessun gruppo rate.</div>' : ''}
+
+      <div id="form-add-conto" style="display:none; border-top:1px solid var(--border); padding-top:12px; margin-top:12px; flex-direction:column; gap:10px;">
+        <div class="form-row">
+          <div style="flex:0.3;"><label class="field-label">Codice</label><input id="nc-codice" placeholder="U001"></div>
+          <div><label class="field-label">Categoria *</label><input id="nc-cat" placeholder="es. Pulizie scale"></div>
+        </div>
+        <div class="form-row">
+          <div><label class="field-label">Importo preventivo (€)</label><input id="nc-importo" type="number" step="0.01" placeholder="0.00"></div>
+          <div><label class="field-label">Tabella millesimale</label>
+            <select id="nc-tabella" style="width:100%;"><option value="">— Nessuna —</option>${tabelleOpt}</select>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-salva-conto" style="justify-content:center;">Aggiungi voce</button>
+      </div>
+
+      <div id="form-add-gruppo" style="display:none; border-top:1px solid var(--border); padding-top:12px; margin-top:12px; flex-direction:column; gap:10px;">
+        <div><label class="field-label">Nome gruppo *</label><input id="ng-nome" placeholder="es. Rate mensili 2024"></div>
+        <div class="form-row">
+          <div><label class="field-label">Periodicità</label>
+            <select id="ng-period" style="width:100%;"><option value="mensile">Mensile</option><option value="bimestrale">Bimestrale</option><option value="trimestrale">Trimestrale</option><option value="semestrale">Semestrale</option><option value="annuale">Annuale</option></select>
+          </div>
+          <div><label class="field-label">N° rate</label><input id="ng-nrate" type="number" value="12"></div>
+        </div>
+        <div class="form-row">
+          <div><label class="field-label">Importo totale (€)</label><input id="ng-importo" type="number" step="0.01" placeholder="0.00"></div>
+          <div><label class="field-label">Prima rata</label><input id="ng-data" type="date"></div>
+        </div>
+        <button class="btn btn-primary btn-sm" id="btn-salva-gruppo" style="justify-content:center;">Genera rate</button>
+      </div>
+    </div>
+  `, 560);
+
+  document.getElementById('btn-add-conto').onclick = () => {
+    const f = document.getElementById('form-add-conto');
+    f.style.display = f.style.display === 'none' ? 'flex' : 'none';
+  };
+  document.getElementById('btn-add-gruppo-rate').onclick = () => {
+    const f = document.getElementById('form-add-gruppo');
+    f.style.display = f.style.display === 'none' ? 'flex' : 'none';
+  };
+  document.getElementById('btn-salva-conto').onclick = async () => {
+    const cat = document.getElementById('nc-cat').value.trim();
+    if (!cat) return;
+    await api(`/esercizi/${esercizioId}/piano-conti`, { method: 'POST', body: JSON.stringify({
+      categoria: cat, codice: document.getElementById('nc-codice').value.trim(),
+      importo_preventivo: Number(document.getElementById('nc-importo').value) || 0,
+      tabella_millesimale_id: document.getElementById('nc-tabella').value || null,
+      condominio_id: stato.condominioId,
+    })});
+    chiudiModale();
+    await caricaDatiCondominio();
+    render();
+  };
+  document.getElementById('btn-salva-gruppo').onclick = async () => {
+    const nome = document.getElementById('ng-nome').value.trim();
+    const importo = document.getElementById('ng-importo').value;
+    if (!nome || !importo) return;
+    await api(`/esercizi/${esercizioId}/gruppi-rate`, { method: 'POST', body: JSON.stringify({
+      nome, periodicita: document.getElementById('ng-period').value,
+      num_rate: Number(document.getElementById('ng-nrate').value) || 12,
+      importo_totale: Number(importo),
+      data_prima_rata: document.getElementById('ng-data').value || null,
+      condominio_id: stato.condominioId,
+    })});
+    chiudiModale();
+    await caricaDatiCondominio();
+    render();
+  };
+  document.querySelectorAll('.btn-del-conto').forEach(btn => {
+    btn.onclick = async () => {
+      await api(`/piano-conti/${btn.dataset.id}`, { method: 'DELETE' });
+      chiudiModale();
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+}
+
+function modaleNuovaFattura() {
+  const fornitoriOpt = (stato.fornitori || []).map(f => `<option value="${f.id}">${escapeHtml(f.ragione_sociale)}</option>`).join('');
+  const eserciziOpt = (stato.esercizi || []).map(e => `<option value="${e.id}">${escapeHtml(e.nome)}</option>`).join('');
+  apriModale(`
+    <div class="modale-header"><h3>Nuova fattura passiva</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div><label class="field-label">Fornitore</label>
+        <select id="nf-forn" style="width:100%;"><option value="">— Seleziona —</option>${fornitoriOpt}</select>
+      </div>
+      <div class="form-row">
+        <div><label class="field-label">N° fattura</label><input id="nf-num" placeholder="es. 2024/001"></div>
+        <div><label class="field-label">Data fattura *</label><input id="nf-data" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <div class="form-row">
+        <div><label class="field-label">Scadenza pagamento</label><input id="nf-scad" type="date"></div>
+        <div><label class="field-label">Esercizio</label>
+          <select id="nf-eser" style="width:100%;"><option value="">— Nessuno —</option>${eserciziOpt}</select>
+        </div>
+      </div>
+      <div class="form-row">
+        <div><label class="field-label">Imponibile (€) *</label><input id="nf-imp" type="number" step="0.01" placeholder="0.00"></div>
+        <div><label class="field-label">IVA %</label><input id="nf-iva" type="number" value="22"></div>
+        <div><label class="field-label">Ritenuta (€)</label><input id="nf-rit" type="number" step="0.01" value="0"></div>
+      </div>
+      <div><label class="field-label">Descrizione</label><input id="nf-desc" placeholder="opzionale"></div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="nf-salva">Registra fattura</button>
+    </div>
+  `, 500);
+  document.getElementById('nf-salva').onclick = async () => {
+    const imponibile = document.getElementById('nf-imp').value;
+    if (!imponibile) return;
+    await api(`/condomini/${stato.condominioId}/fatture-passive`, { method: 'POST', body: JSON.stringify({
+      fornitore_id: document.getElementById('nf-forn').value || null,
+      numero_fattura: document.getElementById('nf-num').value.trim(),
+      data_fattura: document.getElementById('nf-data').value,
+      data_scadenza_pagamento: document.getElementById('nf-scad').value || null,
+      esercizio_id: document.getElementById('nf-eser').value || null,
+      imponibile: Number(imponibile),
+      aliquota_iva: Number(document.getElementById('nf-iva').value) || 22,
+      ritenuta_acconto: Number(document.getElementById('nf-rit').value) || 0,
+      descrizione: document.getElementById('nf-desc').value.trim(),
+    })});
+    chiudiModale();
+    await caricaDatiCondominio();
+    render();
+  };
+}
+
+function modaleNuovoMovimento() {
+  const eserciziOpt = (stato.esercizi || []).map(e => `<option value="${e.id}">${escapeHtml(e.nome)}</option>`).join('');
+  apriModale(`
+    <div class="modale-header"><h3>Nuovo movimento contabile</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
+    <div class="modale-body">
+      <div class="form-row">
+        <div><label class="field-label">Tipo *</label>
+          <select id="nm-tipo" style="width:100%;"><option value="entrata">Entrata</option><option value="uscita">Uscita</option></select>
+        </div>
+        <div><label class="field-label">Data *</label><input id="nm-data" type="date" value="${new Date().toISOString().slice(0,10)}"></div>
+      </div>
+      <div><label class="field-label">Descrizione *</label><input id="nm-desc" placeholder="es. Pagamento fattura pulizie"></div>
+      <div class="form-row">
+        <div><label class="field-label">Importo (€) *</label><input id="nm-importo" type="number" step="0.01" placeholder="0.00"></div>
+        <div><label class="field-label">Esercizio</label>
+          <select id="nm-eser" style="width:100%;"><option value="">— Nessuno —</option>${eserciziOpt}</select>
+        </div>
+      </div>
+      <div><label class="field-label">Riferimento bancario</label><input id="nm-rif" placeholder="es. Bonifico n. 12345"></div>
+      <button class="btn btn-primary" style="justify-content:center; margin-top:6px;" id="nm-salva">Registra movimento</button>
+    </div>
+  `);
+  document.getElementById('nm-salva').onclick = async () => {
+    const descrizione = document.getElementById('nm-desc').value.trim();
+    const importo = document.getElementById('nm-importo').value;
+    if (!descrizione || !importo) return;
+    await api(`/condomini/${stato.condominioId}/registro-conto`, { method: 'POST', body: JSON.stringify({
+      tipo: document.getElementById('nm-tipo').value,
+      data_movimento: document.getElementById('nm-data').value,
+      descrizione, importo: Number(importo),
+      esercizio_id: document.getElementById('nm-eser').value || null,
+      riferimento_bancario: document.getElementById('nm-rif').value.trim(),
+    })});
+    chiudiModale();
+    await caricaDatiCondominio();
+    render();
+  };
+}
+
 function modaleConfermaEliminaCondominio(condominio) {
   apriModale(`
     <div class="modale-header"><h3>Eliminare questo condominio?</h3><button class="modale-close" onclick="chiudiModale()">✕</button></div>
@@ -1086,6 +1767,81 @@ function collegaEventi(condominio) {
     btn.onclick = async () => {
       if (!confirm('Eliminare questa unità?')) return;
       await api(`/unita/${btn.dataset.id}`, { method: 'DELETE' });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+
+  // Tabelle millesimali
+  const btnNuovaTabMill = document.getElementById('btn-nuova-tabella-mill');
+  if (btnNuovaTabMill) btnNuovaTabMill.onclick = modaleNuovaTabellaMillesimale;
+  document.querySelectorAll('.btn-salva-mill').forEach(btn => {
+    btn.onclick = async () => {
+      const valori = [];
+      document.querySelectorAll(`.input-valore-mill[data-tabella="${btn.dataset.tabella}"]`).forEach(inp => {
+        valori.push({ unita_id: inp.dataset.unita, condominio_id: inp.dataset.condominio, valore: Number(inp.value) });
+      });
+      await api(`/valori-millesimali/${btn.dataset.tabella}`, { method: 'PUT', body: JSON.stringify({ valori }) });
+      alert('Valori salvati!');
+    };
+  });
+  document.querySelectorAll('.btn-elimina-tabella-mill').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Eliminare questa tabella millesimale?')) return;
+      await api(`/tabelle-millesimali/${btn.dataset.id}`, { method: 'DELETE' });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+
+  // Esercizi
+  const btnNuovoEs = document.getElementById('btn-nuovo-esercizio');
+  if (btnNuovoEs) btnNuovoEs.onclick = modaleNuovoEsercizio;
+
+  // Fatture
+  const btnNuovaFatt = document.getElementById('btn-nuova-fattura');
+  if (btnNuovaFatt) btnNuovaFatt.onclick = modaleNuovaFattura;
+  document.querySelectorAll('.btn-segna-pagata').forEach(btn => {
+    btn.onclick = async () => {
+      await api(`/fatture-passive/${btn.dataset.id}/stato`, { method: 'PUT', body: JSON.stringify({ stato: 'pagata', data_pagamento: new Date().toISOString().slice(0, 10) }) });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+
+  // Registro conto
+  const btnNuovoMov = document.getElementById('btn-nuovo-movimento');
+  if (btnNuovoMov) btnNuovoMov.onclick = modaleNuovoMovimento;
+  document.querySelectorAll('.btn-elimina-movimento').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Eliminare questo movimento?')) return;
+      await api(`/registro-conto/${btn.dataset.id}`, { method: 'DELETE' });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+
+  // Nominativi
+  const btnNuovoNom = document.getElementById('btn-nuovo-nominativo');
+  if (btnNuovoNom) btnNuovoNom.onclick = modaleNuovoNominativo;
+  document.querySelectorAll('.btn-elimina-nominativo').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm('Eliminare questo nominativo?')) return;
+      await api(`/nominativi/${btn.dataset.id}`, { method: 'DELETE' });
+      await caricaDatiCondominio();
+      render();
+    };
+  });
+
+  // Fornitori
+  const btnNuovoForn = document.getElementById('btn-nuovo-fornitore');
+  if (btnNuovoForn) btnNuovoForn.onclick = modaleNuovoFornitore;
+  document.querySelectorAll('.btn-elimina-fornitore').forEach(btn => {
+    btn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm('Eliminare questo fornitore?')) return;
+      await api(`/fornitori/${btn.dataset.id}`, { method: 'DELETE' });
       await caricaDatiCondominio();
       render();
     };
